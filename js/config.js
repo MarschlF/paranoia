@@ -7,16 +7,16 @@
 export const CONFIG = {
   // Firebase → Projekteinstellungen → Allgemein → "Deine Apps" → Web-App → Konfiguration
   firebase: {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: ""
+    apiKey: "AIzaSyAa34jCvGg5pTASimeOOJTG-6eTBytiPKE",
+    authDomain: "paranoiaguild.firebaseapp.com",
+    projectId: "paranoiaguild",
+    storageBucket: "paranoiaguild.firebasestorage.app",
+    messagingSenderId: "1003579099322",
+    appId: "1:1003579099322:web:c1a08fbbb2a5699344da83"
   },
 
   // URL deines Cloudflare Workers (Discord-Login), z. B. "https://paranoia-auth.marschl.workers.dev"
-  authWorkerUrl: "",
+  authWorkerUrl: "https://paranoia-auth.marschl.workers.dev",
 
   // Allgemeine Infos (werden beim ersten Import als Einstellungen gespeichert)
   guild: {
