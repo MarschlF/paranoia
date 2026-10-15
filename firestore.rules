@@ -1,0 +1,38 @@
+rules_version = '2';
+// ─────────────────────────────────────────────────────────────
+//  Paranøia – Firestore Sicherheitsregeln
+//  Öffentlich lesbar:  settings, players, bosses, raids   (Roster & Progress)
+//  Nur Mitglieder:     guides                       (Boss Guides)
+//  Nur Offiziere:      raidDays, vods, comps        (Comp, Rotation, Loot, Logs, VoDs) – lesen UND schreiben
+//  Guide gelesen:      guideReads – jeder nur sein eigenes Dokument, Offis alle
+//  Schreiben:          nur Offiziere
+//  "member" / "officer" kommen aus dem Discord-Login (Cloudflare Worker)
+// ─────────────────────────────────────────────────────────────
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isMember()  { return request.auth != null && request.auth.token.member == true; }
+    function isOfficer() { return request.auth != null && request.auth.token.officer == true; }
+
+    match /settings/{id} { allow read: if true;       allow write: if isOfficer(); }
+    match /players/{id}  { allow read: if true;       allow write: if isOfficer(); }
+    match /bosses/{id}   { allow read: if true;       allow write: if isOfficer(); }
+    match /raids/{id}    { allow read: if true;       allow write: if isOfficer(); }
+
+    match /raidDays/{id} { allow read: if isOfficer(); allow write: if isOfficer(); }
+    match /vods/{id}     { allow read: if isOfficer(); allow write: if isOfficer(); }
+    match /comps/{id}    { allow read: if isOfficer(); allow write: if isOfficer(); }
+    match /guides/{id}   { allow read: if isMember(); allow write: if isOfficer(); }
+
+    // Guide-Lesebestätigung: jeder liest/schreibt nur sein eigenes Dokument, Offis alles.
+    // Raider dürfen die Offi-Zuordnung (playerId) nicht ändern.
+    match /guideReads/{uid} {
+      allow read: if isOfficer() || (isMember() && request.auth.uid == uid);
+      allow write: if isOfficer() || (isMember() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'reads', 'playerId'])
+        && request.resource.data.get('playerId', null) == (resource == null ? null : resource.data.get('playerId', null)));
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

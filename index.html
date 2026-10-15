@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paranøia · EU Todeswache</title>
+  <meta name="description" content="Paranøia – Mythic Raidgilde auf EU Todeswache.">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="demo-banner" class="demo-banner hidden">
+    Demo-Modus · Daten werden nur in diesem Browser gespeichert · Firebase in <code>js/config.js</code> eintragen für den Live-Betrieb
+  </div>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="#/" class="brand">
+        <img class="brand-logo" src="assets/logo-nav.webp" alt="" width="52" height="46">
+        <span class="brand-text">
+          <span class="brand-name">Paranøia</span>
+          <span class="brand-realm">EU · Todeswache</span>
+        </span>
+      </a>
+
+      <button class="nav-toggle" id="nav-toggle" aria-label="Menü">
+        <span></span><span></span><span></span>
+      </button>
+
+      <div class="nav-menu" id="nav-menu">
+        <div class="nav-group">
+          <a href="#/" data-route="home">Home</a>
+          <a href="#/roster" data-route="roster">Roster</a>
+          <a href="#/progress" data-route="progress">Progress</a>
+        </div>
+        <div class="nav-group nav-internal">
+          <span class="nav-label">Intern</span>
+          <a href="#/guides" data-route="guides">Boss Guides</a>
+          <a href="#/logs" data-route="logs">Logs</a>
+          <a href="#/nuetzliches" data-route="nuetzliches">Nützliches</a>
+        </div>
+        <div class="nav-group nav-internal nav-officer hidden" id="nav-officer">
+          <span class="nav-label nav-label-offi">Offi</span>
+          <a href="#/comp" data-route="comp">Comp</a>
+          <a href="#/rotation" data-route="rotation">Rotation</a>
+          <a href="#/loot" data-route="loot">Loot</a>
+          <a href="#/gear" data-route="gear">Gear</a>
+          <a href="#/vods" data-route="vods">VoDs</a>
+        </div>
+        <div class="nav-auth" id="nav-auth"></div>
+      </div>
+    </div>
+  </nav>
+
+  <main id="app" class="app"></main>
+
+  <footer class="footer">
+    <span>Paranøia · EU Todeswache</span>
+    <a href="https://raider.io/guilds/eu/todeswache/Paran%C3%B8ia" target="_blank" rel="noopener">Raider.IO</a>
+  </footer>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

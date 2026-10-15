@@ -1,0 +1,37 @@
+# Cloudflare Worker für den Discord-Login
+# Deploy: im Ordner "worker" →  npx wrangler deploy
+name = "paranoia-auth"
+main = "index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Discord Developer Portal → deine App → OAuth2 → Client ID
+DISCORD_CLIENT_ID = ""
+# Discord: Rechtsklick auf den Server → "Server-ID kopieren" (Entwicklermodus muss an sein)
+DISCORD_GUILD_ID = ""
+# Rollen-IDs mit Bearbeitungsrechten (Offiziere), kommagetrennt
+OFFICER_ROLE_IDS = ""
+# Deine eigene Discord-User-ID – immer Offizier, auch ohne Rolle (kommagetrennt möglich)
+ADMIN_DISCORD_IDS = ""
+# Wohin nach dem Login zurückgeleitet werden darf (deine GitHub-Pages-URL, mit / am Ende)
+ALLOWED_REDIRECTS = "https://marschlf.github.io/paranoia/"
+# Firebase → Projekteinstellungen → Dienstkonten → client_email aus der JSON-Datei
+FIREBASE_CLIENT_EMAIL = ""
+
+# Firebase-Projekt-ID (für den Discord-Post; leer = wird aus FIREBASE_CLIENT_EMAIL gelesen)
+FIREBASE_PROJECT_ID = ""
+# Name, unter dem das Comp-Bild in Discord erscheint
+DISCORD_WEBHOOK_NAME = "Paranøia"
+
+# Warcraft Logs – Gilde genau so schreiben wie auf warcraftlogs.com
+WCL_GUILD_NAME = "Paranøia"
+WCL_SERVER_SLUG = "todeswache"
+WCL_REGION = "EU"
+
+# Secrets NICHT hier eintragen, sondern per Befehl:
+#   npx wrangler secret put DISCORD_CLIENT_SECRET
+#   npx wrangler secret put FIREBASE_PRIVATE_KEY
+#   npx wrangler secret put WCL_CLIENT_ID
+#   npx wrangler secret put WCL_CLIENT_SECRET
+#   npx wrangler secret put DISCORD_WEBHOOK_URL   (Comp-Bild → Raid-Anmeldungs-Channel)
+#   npx wrangler secret put WOWAUDIT_API_KEY      (Wochen-Check; wowaudit → Team Settings → API)
