@@ -5,7 +5,7 @@
 //  Namen, die nicht im Roster stehen, ordnet man einmal zu → wird gemerkt (settings.main.lootAliases).
 // ─────────────────────────────────────────────────────────────
 import { store } from './store.js';
-import { esc, h, openModal, toast, fmtDate, raidDates, isoDate, parseIso, WD, sortPlayers } from './ui.js';
+import { esc, h, openModal, toast, fmtDate, raidDates, isoDate, parseIso, WD, sortPlayers, matchPlayer } from './ui.js';
 
 // Antworten, die standardmäßig NICHT zählen (Entzaubern, Bank, Pass …)
 const SKIP = /disenchant|entzaub|bank|pass|free|frei|offspec ?\(free\)|transmog/i;
@@ -78,7 +78,7 @@ export function openRclcImport({ players, settings, days }) {
   const dates = new Set(raidDates(settings));
   const byName = new Map();
   players.forEach(p => { byName.set(String(p.charName || p.name).toLowerCase(), p.id); byName.set(String(p.name).toLowerCase(), p.id); });
-  const findPlayer = n => aliases[n.toLowerCase()] || byName.get(n.toLowerCase()) || '';
+  const findPlayer = n => aliases[n.toLowerCase()] || byName.get(n.toLowerCase()) || matchPlayer(players, n)?.id || '';
   // Nach Mitternacht gelootet → gehört zum Raidtag davor
   const raidDay = d => {
     if (dates.has(d)) return d;

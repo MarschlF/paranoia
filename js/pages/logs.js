@@ -3,7 +3,7 @@
 //  + Defensive-Check: Defensives, Healthstones, Tränke und Tode pro Spieler
 // ─────────────────────────────────────────────────────────────
 import { store, auth } from '../store.js';
-import { esc, h, raidDates, todayIso, fmtDate, fmtShort, parseIso, WD, toast, openModal, clsColor, specImg } from '../ui.js';
+import { esc, h, raidDates, todayIso, fmtDate, fmtShort, parseIso, WD, toast, openModal, clsColor, specImg, matchPlayer } from '../ui.js';
 import { getWcl } from '../wcl.js';
 import { CHECK_GROUPS, groupsFrom, getCheck, aggregate, setDemoPlayers } from '../checks.js';
 import { DEMO_MODE } from '../config.js';
@@ -203,9 +203,7 @@ export function render(root) {
 
 // ── Tabelle ──────────────────────────────────────────────────
 function checkTable(agg, groups, players, { onlyRoster, nights }) {
-  const roster = new Map();
-  players.forEach(p => roster.set(String(p.charName || p.name).toLowerCase(), p));
-  let rows = [...agg.players.values()].map(a => ({ a, p: roster.get(a.name.toLowerCase()) || null }));
+  let rows = [...agg.players.values()].map(a => ({ a, p: matchPlayer(players, a.name) }));
   if (onlyRoster) rows = rows.filter(r => r.p);
 
   const per = (n, r) => r.a.pulls ? n / r.a.pulls : 0;

@@ -29,7 +29,8 @@ export function openPlayerForm(player = null) {
       <div class="field"><label>Status</label><select class="select" name="status">
         ${Object.keys(STATUSES).map(s => `<option value="${s}" ${s === p.status ? 'selected' : ''}>${s}</option>`).join('')}
       </select></div>
-      <div class="field full"><label>Charaktername <span class="muted">(nur falls anders als Name)</span></label><input class="input" name="charName" value="${esc(p.charName || '')}" placeholder="wie im Spiel, für Raider.IO & Logs" autocomplete="off"></div>
+      <div class="field"><label>Charaktername <span class="muted">(falls anders)</span></label><input class="input" name="charName" value="${esc(p.charName || '')}" placeholder="genau wie ingame, z. B. Krágy" autocomplete="off"></div>
+      <div class="field"><label>Realm <span class="muted">(leer = automatisch)</span></label><input class="input" name="realm" value="${esc(p.realm || '')}" placeholder="z. B. Thrall" autocomplete="off"></div>
     </div>`);
   const kSel = form.querySelector('[name=klasse]'), sSel = form.querySelector('[name=spec]'), rSel = form.querySelector('[name=rolle]');
   const fillSpecs = (keep) => {
@@ -49,6 +50,7 @@ export function openPlayerForm(player = null) {
         if (!data.name.trim()) { toast('Name fehlt', 'err'); return true; }
         data.name = data.name.trim();
         data.charName = (data.charName || '').trim();
+        data.realm = (data.realm || '').trim();
         if (player) await store.set('players', player.id, data);
         else await store.add('players', { ...data, active: true });
         toast(player ? 'Gespeichert' : `${data.name} hinzugefügt`);

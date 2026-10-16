@@ -186,3 +186,41 @@ export function raidBosses(bosses, raidId, settings) {
   return bosses.filter(b => (b.raidId || cur) === raidId).sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 export const slug = s => String(s || '').toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-').slice(0, 40) || Math.random().toString(36).slice(2, 8);
+
+/** Namen vergleichen ohne Groß/klein und Akzente (Krágy = Kragy) */
+export const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+/** Spieler zu einem Charakternamen finden: exakt, sonst ohne Akzente (nur wenn eindeutig) */
+export function matchPlayer(players, name) {
+  const n = String(name || '').trim().toLowerCase();
+  const exact = players.find(p => String(p.charName || '').toLowerCase() === n || String(p.name).toLowerCase() === n);
+  if (exact) return exact;
+  const f = fold(name);
+  const loose = players.filter(p => fold(p.charName) === f || fold(p.name) === f);
+  return loose.length === 1 ? loose[0] : null;
+}
+
+// ── Item-Symbole & Wowhead-Tooltips ─────────────────────────
+const ZAM = 'https://wow.zamimg.com/images/wow/icons';
+export const iconUrl = (icon, size = 'medium') => `${ZAM}/${size}/${String(icon || 'inv_misc_questionmark').toLowerCase().replace(/[^a-z0-9_-]/g, '')}.jpg`;
+const QUALITY = { 0: '#9d9d9d', 1: '#ffffff', 2: '#1eff00', 3: '#0070dd', 4: '#a335ee', 5: '#ff8000', 6: '#e6cc80' };
+/** Item-Symbol mit Wowhead-Tooltip. it = { id, ilvl, icon, q, bonus[], gemIds[], ench } */
+export function itemIcon(it, size = 36) {
+  const params = [it.id && `item=${it.id}`, it.ilvl && `ilvl=${it.ilvl}`, it.bonus?.length && `bonus=${it.bonus.join(':')}`,
+    it.gemIds?.length && `gems=${it.gemIds.join(':')}`, it.ench && `ench=${it.ench}`, 'domain=de'].filter(Boolean).join('&');
+  const img = `<img class="item-ico" src="${iconUrl(it.icon)}" width="${size}" height="${size}" alt="" loading="lazy" style="--q:${QUALITY[it.q] || 'var(--line-2)'}">`;
+  return it.id
+    ? `<a class="item-link" href="https://www.wowhead.com/de/item=${Number(it.id)}" target="_blank" rel="noopener" data-wowhead="${esc(params)}" data-stop>${img}</a>`
+    : img;
+}
+/** Wowhead-Tooltip-Skript einmalig laden und neue Links aktivieren */
+export function refreshTooltips() {
+  if (!window.__whLoaded) {
+    window.__whLoaded = true;
+    window.whTooltips = { colorLinks: false, iconizeLinks: false, renameLinks: false };
+    const sc = document.createElement('script');
+    sc.src = 'https://wow.zamimg.com/js/tooltips.js';
+    document.head.appendChild(sc);
+    return;
+  }
+  try { window.$WowheadPower?.refreshLinks(); } catch {}
+}
