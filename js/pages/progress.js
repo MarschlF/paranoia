@@ -5,7 +5,7 @@ import { store, auth } from '../store.js';
 import { esc, h, openModal, toast, fmtDate, raidBosses } from '../ui.js';
 import { getWcl, mergeBoss } from '../wcl.js';
 import { openProgCurve } from '../progcurve.js';
-import { BOSS_STATUS, sortRaids, editBoss, editRaid, setCurrentRaid, raidCardsHtml, raidBannerHtml } from '../raids.js';
+import { BOSS_STATUS, sortRaids, editBoss, editRaid, setCurrentRaid, raidCardsHtml, raidBannerHtml, watchBossCovers } from '../raids.js';
 
 export function render(root, { params }) {
   return params[0] ? renderRaid(root, decodeURIComponent(params[0])) : renderOverview(root);
@@ -92,7 +92,10 @@ function renderRaid(root, raidId) {
     </div>`);
   root.appendChild(el);
 
-  const { st, stop } = watchAll(() => draw());
+  const { st, stop: stopAll } = watchAll(() => draw());
+  let covers = {};
+  const stopCovers = watchBossCovers(c => { covers = c; draw(); });
+  const stop = () => { stopAll(); stopCovers(); };
   el.querySelector('[data-editraid]')?.addEventListener('click', () => editRaid(st.raids.find(r => r.id === raidId), st));
   el.querySelector('[data-add]')?.addEventListener('click', () =>
     editBoss(null, { raids: st.raids, raidId, nextOrder: raidBosses(st.bosses, raidId, st.settings).length + 1 }));
@@ -122,7 +125,7 @@ function renderRaid(root, raidId) {
       const row = h(`
         <div class="card boss-row ${b.status || 'open'}">
           <div class="boss-num">${i + 1}</div>
-          <div><div class="boss-name">${esc(b.name)}${b.source === 'wcl' ? '<span class="src-tag" title="Aus Warcraft Logs">WCL</span>' : ''}</div><div class="boss-sub">${esc(sub)}${b.nights?.length ? `${sub ? ' · ' : ''}<button class="curve-btn" data-curve>📈 Prog-Kurve</button>` : ''}</div></div>
+          <div class="boss-ident">${(b.thumb || covers[b.id]) ? `<div class="boss-thumb"><img src="${b.thumb || covers[b.id]}" alt="" loading="lazy"></div>` : ''}<div style="min-width:0"><div class="boss-name">${esc(b.name)}${b.source === 'wcl' ? '<span class="src-tag" title="Aus Warcraft Logs">WCL</span>' : ''}</div><div class="boss-sub">${esc(sub)}${b.nights?.length ? `${sub ? ' · ' : ''}<button class="curve-btn" data-curve>📈 Prog-Kurve</button>` : ''}</div></div></div>
           <div><span class="boss-status ${s.cls}">${s.label}</span></div>
           <div class="hide-sm"><div class="boss-cell-label">Pulls</div><div class="boss-cell-val">${b.pulls || '–'}</div></div>
           <div class="hide-sm"><div class="boss-cell-label">Best</div><div class="boss-cell-val">${b.status === 'kill' ? '✓' : (b.bestPct !== undefined && b.bestPct !== '' ? b.bestPct + ' %' : '–')}</div></div>
@@ -148,6 +151,8 @@ function editSettings(s, raids, bosses) {
       </div>
       <div class="field"><label>Season-Start</label><input class="input" type="date" name="startDate" value="${esc(s.startDate || '')}"></div>
       <div class="field"><label>Season-Ende</label><input class="input" type="date" name="endDate" value="${esc(s.endDate || '')}"></div>
+      <div class="field"><label>Raid-Beginn</label><input class="input" type="time" name="raidStart" value="${esc(s.raidStart || '')}"></div>
+      <div class="field"><label>Raid-Ende</label><input class="input" type="time" name="raidEnd" value="${esc(s.raidEnd || '')}"></div>
       <div class="field full"><label>Raidtage</label>
         <div style="display:flex;gap:6px;flex-wrap:wrap">${days.map(([n, l]) =>
           `<label class="chip ${wd.has(n) ? 'active' : ''}" style="display:inline-flex;align-items:center"><input type="checkbox" value="${n}" ${wd.has(n) ? 'checked' : ''} style="display:none">${l}</label>`).join('')}</div>
@@ -163,7 +168,7 @@ function editSettings(s, raids, bosses) {
       const v = n => form.querySelector(`[name=${n}]`).value;
       const raid = raids.find(r => r.id === v('currentRaid'));
       await store.set('settings', 'main', {
-        startDate: v('startDate'), endDate: v('endDate'),
+        startDate: v('startDate'), endDate: v('endDate'), raidStart: v('raidStart'), raidEnd: v('raidEnd'),
         raidWeekdays: [...form.querySelectorAll('input[type=checkbox]:checked')].map(c => Number(c.value)),
       });
       if (raid && raid.id !== s.currentRaid) await setCurrentRaid(raid);

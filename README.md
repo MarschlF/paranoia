@@ -3,7 +3,7 @@
 | Bereich | Seiten | Wer sieht es |
 |---|---|---|
 | Öffentlich | Home · Roster · Progress | alle |
-| **Intern** | Boss Guides · Logs · Nützliches | alle Raider auf dem Discord |
+| **Intern** | Boss Guides · Logs · Vergleich · Umfragen · Nützliches | alle Raider auf dem Discord |
 | **Offi** | Raid Comp · Rotation Planer · Loot Tracker · Gear · Defensive-Check & Log-Notizen · VoDs | nur Offiziere |
 
 Spieler werden an **einer** Stelle verwaltet (Roster → „Spieler verwalten") und tauchen automatisch im Roster, Rotation Planer und Loot Tracker auf. Archivierte Spieler verschwinden aus den Tabellen, ihre Historie bleibt erhalten.
@@ -119,7 +119,7 @@ Danach holt die Seite alle Logs der Gilde ab Season-Start (Progress → Raid-Ein
 
 Nichts zu tun – Raider.IO braucht keinen Schlüssel, der Worker fragt die öffentliche API ab (30 Min. Cache).
 - **Gear** (Offi) zeigt Itemlevel, M+ Score, Progress, den schwächsten Slot und fehlende Verzauberungen. Zeile anklicken = alle Slots.
-- Alle Charaktere werden auf **Todeswache** gesucht. Heißt der Charakter anders als der Name im Roster, unter *Spieler verwalten* den **Charakternamen** eintragen.
+- Den Realm holt die Seite automatisch aus der Raider.IO-Gildenliste (die Gilde ist realmübergreifend). Heißt der Charakter anders als im Roster (auch Akzente: Mârvic ≠ Marvik), unter *Spieler verwalten* den **Charakternamen** eintragen; erwischt sie den falschen Charakter, zusätzlich den **Realm**.
 - Welche Slots als „verzauberbar" gelten, steht oben in `js/pages/gear.js` (`ENCHANT_SLOTS`) – derzeit Kopf, Schulter, Brust, Füße, Ringe, Waffe.
 
 ### 7 · Comp-Bild direkt in Discord posten (optional)
@@ -140,6 +140,21 @@ Danach im Comp: **Als Bild für Discord → In Discord posten**. Nur Offiziere k
 2. Im Ordner `worker/`: `npx wrangler secret put WOWAUDIT_API_KEY` → Schlüssel einfügen → `npx wrangler deploy`.
 
 Danach zeigt **Gear → Wochen-Check** pro Spieler die M+ Keys der Woche (EU-Reset Mittwoch), die M+ Vault-Slots (1/4/8 Keys) und die Raid-Teilnahme aus dem Rotation Planer. Die Anforderung (z. B. 4 Keys ab +10) stellt ihr oben ein; wer sie nicht erfüllt, ist rot markiert. Mit ← / → blättert ihr in vergangene Wochen. Spieler werden über den Namen zugeordnet – heißt der Charakter in wowaudit anders, im Roster den Charakternamen eintragen.
+
+### Nützliches: Addons & Profile / Neu bei uns
+Drei Tabs: **Links**, **Addons & Profile** (Pflicht / Empfohlen / Profile, Download-Link und Import-String mit Kopieren-Button) und **Neu bei uns** (Text für neue Raider + Pflicht-Addons als persönliche Checkliste). Bearbeiten nur Offis. Gespeichert in der Collection `addons` – benötigt die `addons`-Regel aus `firestore.rules`.
+
+### Boss Guides: Titelbild, Bilder, Vorlage
+- **Boss-Titelbild:** Boss bearbeiten (✎ auf der Bosskarte oder „✎ Boss“ im Guide) → Titelbild. Gespeichert in `bossCovers/<bossId>`.
+- **Bilder im Guide:** bis zu 3 Bilder pro Guide direkt hochladen (Bearbeiten → Bilder), mit Beschriftung; Klick vergrößert. Gespeichert in `guideImages/<bossId>`.
+- **Guide-Vorlage:** Boss Guides → „Guide-Vorlage“. Neue (leere) Guides starten mit diesem Aufbau.
+Beides benötigt die Regeln `bossCovers` und `guideImages` aus `firestore.rules`.
+
+### App-Icon
+`manifest.webmanifest` + Icons in `assets/`: Auf dem Handy „Zum Home-Bildschirm“ wählen, dann startet die Seite wie eine App.
+
+### Online-Status (nur Offis)
+Eingeloggte Nutzer melden sich jede Minute (nur bei offenem Tab) in `presence/<uid>`. Offis sehen oben rechts „● n online" mit Liste inkl. „zuletzt gesehen" und im Roster einen grünen Punkt bzw. „vor x Min." am Namen. Discord-Name ≠ Charaktername → Zuordnung wie bei Guides/Umfragen (Umfrage-Auswertung). Benötigt die neuen `presence`-Regeln in `firestore.rules`.
 
 ### Update von einer älteren Version
 
@@ -176,6 +191,9 @@ Wer die Seite schon live hat: neue Dateien hochladen und im Ordner `worker/` ein
 | Titelbild für einen Raid | Progress oder Boss Guides → ✎ auf der Raid-Kachel → *Bild auswählen* (wird automatisch verkleinert) – erscheint auch auf Home in der Progress-Kachel |
 | Neue Season / neuer Raid | Boss Guides → *+ Raid* (oder Progress → Raid-Einstellungen → *+ Neuer Raid*), dann Bosse mit *+ Boss* anlegen. Alte Raids und Guides bleiben als eigener Reiter erhalten. |
 | Links | Nützliches → *+ Link* |
+| Zwei Spieler vergleichen (DPS, Stats, Gear, Talente) | Vergleich → Boss + 2 Spieler wählen (Daten aus dem letzten Kill bzw. besten Pull in Warcraft Logs) |
+| Umfrage erstellen | Umfragen → *+ Neue Umfrage* → Fragen hinzufügen (Einfach-/Mehrfachauswahl, Kurztext, Absatz, Skala). Nach dem Veröffentlichen sehen alle Raider ein Popup und ein rotes Rufzeichen |
+| Umfrage auswerten | Umfrage öffnen → Reiter *Auswertung*: wer fehlt, Antworten pro Spieler, Zusammenfassung, CSV-Download. Raider sehen nur ihre eigenen Antworten |
 | Wer hat diese Woche seine Keys gemacht? | Gear → Reiter *Wochen-Check* |
 | Gear-Stand prüfen | Gear → sortieren nach iLvl / Score · fehlende Verzauberungen rot |
 | Defensives / Tränke nach dem Raid | Logs → *🛡 Check* beim Abend oder Reiter *Defensive-Check* |
@@ -201,16 +219,20 @@ js/progcurve.js       Prog-Kurve (Diagramm)
 js/rclc.js            Loot-Import aus RCLootCouncil
 js/guidereads.js      Guide-Lesebestätigung + Quiz
 js/wowaudit.js        wowaudit-Daten auf der Seite
+js/compare.js         Vergleichs-Daten auf der Seite
+js/polls.js           Umfragen (Datenmodell)
 worker/index.js       Discord-Login (Cloudflare)
 worker/wcl.js         Warcraft-Logs-Abfrage + Defensive-Check (Cloudflare)
 worker/rio.js         Raider.IO-Abfrage (Cloudflare)
 worker/discord.js     Comp-Bild in Discord posten (Cloudflare)
 worker/wowaudit.js    Wochen-Check aus wowaudit (Cloudflare)
+worker/compare.js     Spieler-Vergleich aus Warcraft Logs (Cloudflare)
 ```
 
 ## Sicherheit kurz erklärt
 
 - Passwörter sieht die Seite nie – Discord bestätigt nur, wer du bist und ob du auf dem Server bist.
 - Die Firebase-Werte in `config.js` sind öffentlich gedacht; geschützt wird über `firestore.rules`.
+- Umfragen: Raider können nur ihre eigene Antwort lesen und schreiben (und nur solange die Umfrage offen ist); alle Antworten sehen nur Offis.
 - Guide-Lesebestätigung: jeder Raider kann nur seine eigene Bestätigung schreiben und sehen; die Übersicht, wer gelesen hat, sehen nur Offis.
 - Geheim bleiben nur **Discord Client Secret**, **Firebase Private Key** und **WCL Client Secret** , die **Discord-Webhook-URL** und der **wowaudit-Schlüssel** – die liegen ausschließlich als Secret bei Cloudflare.

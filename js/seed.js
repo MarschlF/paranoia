@@ -8,12 +8,21 @@ export const SEED_RAIDS = [
 ];
 
 export const SEED_SETTINGS = {
+  guideTemplate: {
+    overview: '### Setup\n- Tanks · Heiler · DPS: \n- Bloodlust: \n\n### Grundregeln\n- \n\n### Häufigste Fehler\n- ',
+    tanks: '### Swap\n- \n\n### Positionierung\n- ',
+    healer: '### Schadensspitzen\n- \n\n### Dispels\n- ',
+    dps: '### Prioritäten\n- \n\n### Kicks / Adds\n- ',
+    intermission: '',
+  },
   currentRaid: 'venomous-abyss',
   raidName: 'The Venomous Abyss',
   season: 'Season 2',
   startDate: '2026-08-20',
   endDate: '2027-02-02',
   raidWeekdays: [2, 4],      // 2 = Dienstag, 4 = Donnerstag
+  raidStart: '19:45',
+  raidEnd: '23:00',
   extraDays: [],
   skipDays: [],
   links: [

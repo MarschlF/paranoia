@@ -5,6 +5,7 @@ rules_version = '2';
 //  Nur Mitglieder:     guides                       (Boss Guides)
 //  Nur Offiziere:      raidDays, vods, comps        (Comp, Rotation, Loot, Logs, VoDs) – lesen UND schreiben
 //  Guide gelesen:      guideReads – jeder nur sein eigenes Dokument, Offis alle
+//  Umfragen:           polls lesen alle Raider; pollAnswers jeder nur die eigene, Offis alle
 //  Schreiben:          nur Offiziere
 //  "member" / "officer" kommen aus dem Discord-Login (Cloudflare Worker)
 // ─────────────────────────────────────────────────────────────
@@ -23,14 +24,39 @@ service cloud.firestore {
     match /vods/{id}     { allow read: if isOfficer(); allow write: if isOfficer(); }
     match /comps/{id}    { allow read: if isOfficer(); allow write: if isOfficer(); }
     match /guides/{id}   { allow read: if isMember(); allow write: if isOfficer(); }
+    match /guideImages/{id} { allow read: if isMember(); allow write: if isOfficer(); }  // Bilder in den Boss Guides
+    match /bossCovers/{id} { allow read: if true;       allow write: if isOfficer(); }   // Boss-Titelbilder (öffentlich: Startseite, Progress, Guides)
+    match /addons/{id}   { allow read: if isMember(); allow write: if isOfficer(); }   // Nützliches: Addons, Profile, „Neu bei uns“
 
     // Guide-Lesebestätigung: jeder liest/schreibt nur sein eigenes Dokument, Offis alles.
     // Raider dürfen die Offi-Zuordnung (playerId) nicht ändern.
+    // Online-Status: jeder schreibt nur sein eigenes Dokument, lesen nur Offis
+    match /presence/{uid} {
+      allow read: if isOfficer();
+      allow write: if isMember() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'avatar', 'at']);
+    }
+
     match /guideReads/{uid} {
       allow read: if isOfficer() || (isMember() && request.auth.uid == uid);
       allow write: if isOfficer() || (isMember() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['name', 'reads', 'playerId'])
         && request.resource.data.get('playerId', null) == (resource == null ? null : resource.data.get('playerId', null)));
+    }
+
+    // Umfragen: alle Raider lesen, nur Offis anlegen/ändern
+    match /polls/{id} { allow read: if isMember(); allow write: if isOfficer(); }
+
+    // Antworten: Dokument-ID = <Umfrage>__<uid>. Jeder liest/schreibt nur seine eigene,
+    // nur solange die Umfrage offen ist. Offis lesen alle (Auswertung) und dürfen löschen.
+    match /pollAnswers/{id} {
+      allow read: if isOfficer() || (isMember() && id.split('__')[1] == request.auth.uid);
+      allow create, update: if isMember()
+        && id == request.resource.data.pollId + '__' + request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['pollId', 'uid', 'name', 'answers', 'at'])
+        && get(/databases/$(database)/documents/polls/$(request.resource.data.pollId)).data.open == true;
+      allow delete: if isOfficer();
     }
 
     match /{document=**} { allow read, write: if false; }

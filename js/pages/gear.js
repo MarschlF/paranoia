@@ -3,7 +3,7 @@
 //  schwächster Slot und fehlende Verzauberungen – aus Raider.IO
 // ─────────────────────────────────────────────────────────────
 import { store } from '../store.js';
-import { ROLES, clsColor, esc, h, specImg, slug } from '../ui.js';
+import { ROLES, clsColor, esc, h, specImg, slug, itemIcon, refreshTooltips } from '../ui.js';
 import { getRio, charKey, charOf, DEFAULT_REALM } from '../rio.js';
 import { openPlayerManager } from '../players.js';
 import * as week from './week.js';
@@ -125,10 +125,11 @@ export function render(root, { params = [] } = {}) {
       <thead><tr><th>Spieler</th><th>iLvl</th><th>M+ Score</th><th>Progress</th><th>Schwächster Slot</th><th>Verzauberungen</th><th>Stand</th><th></th></tr></thead>
       <tbody>${rows.map(({ p, d }) => {
         const k = charKey(p), c = charOf(p);
-        const realm = c.realm.toLowerCase() !== DEFAULT_REALM.toLowerCase() ? `<span class="muted gear-realm">${esc(c.realm)}</span>` : '';
+        const rn = d?.realm || c.realm;
+        const realm = rn && rn.toLowerCase() !== DEFAULT_REALM.toLowerCase() ? `<span class="muted gear-realm">${esc(rn)}</span>` : '';
         const alias = c.name !== p.name ? `<span class="muted gear-realm">${esc(c.name)}</span>` : '';
         const nameCell = `<td><div class="pname-inner" style="--cls:${clsColor(p.klasse)}">${specImg(p, 22)}<span class="nm">${esc(p.name)}</span>${alias}${realm}</div></td>`;
-        if (!d || d.error) return `<tr class="gear-miss">${nameCell}<td colspan="7"><span class="muted">${d?.error === 'not_found' ? `Nicht auf Raider.IO gefunden – unter „Spieler verwalten" den Charakternamen prüfen (${esc(c.name)})` : 'Keine Daten'}</span></td></tr>`;
+        if (!d || d.error) return `<tr class="gear-miss">${nameCell}<td colspan="7"><span class="muted">${d?.error === 'not_found' ? `Nicht auf Raider.IO gefunden – unter „Spieler verwalten" Charaktername (genau wie ingame, inkl. Akzente) bzw. Realm prüfen (${esc(c.name)})` : 'Keine Daten'}</span></td></tr>`;
         const pct = maxI > minI ? (d.ilvl - minI) / (maxI - minI) : 1;
         const low = lowest(d);
         const miss = missEnch(d);
@@ -138,13 +139,14 @@ export function render(root, { params = [] } = {}) {
           <td><div class="ilvl"><b>${d.ilvl?.toFixed ? d.ilvl.toFixed(1) : d.ilvl}</b><span class="ilvl-bar"><span style="width:${Math.round(15 + pct * 85)}%;background:${ilvlColor(pct)}"></span></span></div></td>
           <td><span style="color:${scoreColor(d.score)};font-weight:600">${d.score ? Math.round(d.score).toLocaleString('de-AT') : '–'}</span></td>
           <td>${d.raid?.[raidKey] ? `<span class="prog-tag">${esc(d.raid[raidKey])}</span>` : '<span class="muted">–</span>'}</td>
-          <td>${low ? `${esc(SLOT_DE[low.slot] || low.slot)} <span class="muted">${low.ilvl}</span>` : '–'}</td>
-          <td>${miss.length ? `<span class="ench-miss" title="${esc(miss.map(s => SLOT_DE[s] || s).join(', '))}">${miss.length} fehlt${miss.length > 1 ? 'en' : ''}</span>` : '<span class="ench-ok">✓</span>'}</td>
+          <td>${low ? `<span class="low-cell">${itemIcon(low, 22)}${esc(SLOT_DE[low.slot] || low.slot)} <span class="muted">${low.ilvl}</span></span>` : '–'}</td>
+          <td>${miss.length ? `<span class="ench-miss" title="${esc(miss.map(s => SLOT_DE[s] || s).join(', '))}">${miss.length} ${miss.length > 1 ? 'fehlen' : 'fehlt'}</span>` : '<span class="ench-ok">✓</span>'}</td>
           <td class="muted nowrap">${ago(d.crawled)}</td>
           <td class="nowrap">${d.url ? `<a class="log-btn" href="${esc(d.url)}" target="_blank" rel="noopener" data-stop>Raider.IO ↗</a>` : ''}</td>
         </tr>${isOpen ? `<tr class="gear-detail"><td colspan="8">${slotsHtml(d)}</td></tr>` : ''}`;
       }).join('')}</tbody></table>`;
 
+    refreshTooltips();
     wrap.querySelectorAll('.gear-row').forEach(tr => tr.onclick = e => {
       if (e.target.closest('[data-stop]')) return;
       const k = tr.dataset.k; open.has(k) ? open.delete(k) : open.add(k); draw();
@@ -172,10 +174,12 @@ function slotsHtml(d) {
   return `<div class="slot-grid">${items.map(i => {
     const needs = ENCHANT_SLOTS.includes(i.slot);
     return `<div class="slot ${i.ilvl === low ? 'low' : ''}">
-      <span class="slot-name">${esc(SLOT_DE[i.slot] || i.slot)}</span>
-      <span class="slot-ilvl">${i.ilvl}</span>
-      ${needs ? (i.enchant ? '<span class="slot-ench ok" title="Verzaubert">✦</span>' : '<span class="slot-ench miss" title="Verzauberung fehlt">✦ fehlt</span>') : ''}
-      ${i.name ? `<span class="slot-item" title="${esc(i.name)}">${esc(i.name)}</span>` : ''}
+      <div class="slot-ico">${itemIcon(i, 38)}</div>
+      <div class="slot-txt">
+        <div class="slot-top"><span class="slot-name">${esc(SLOT_DE[i.slot] || i.slot)}</span><span class="slot-ilvl">${i.ilvl}</span></div>
+        ${i.name ? `<span class="slot-item" title="${esc(i.name)}">${esc(i.name)}</span>` : ''}
+        ${needs ? (i.enchant ? '<span class="slot-ench ok" title="Verzaubert">✦ verzaubert</span>' : '<span class="slot-ench miss" title="Verzauberung fehlt">✦ fehlt</span>') : ''}
+      </div>
     </div>`;
   }).join('')}</div>`;
 }

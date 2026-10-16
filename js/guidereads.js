@@ -6,10 +6,16 @@
 //  · guides/<bossId>.quiz     → optional [{ q, a: [..], c: <richtiger Index> }]
 // ─────────────────────────────────────────────────────────────
 import { store, auth } from './store.js';
-import { esc, h, openModal, toast, clsColor, specImg, sortPlayers } from './ui.js';
+import { esc, h, openModal, toast, clsColor, specImg, sortPlayers, matchPlayer } from './ui.js';
 
 export const MIN_SECONDS = 30;
-export const RUF = `<span class="ruf" title="Noch nicht bestätigt" aria-label="ungelesen">!</span>`;
+// Gelbes Quest-Rufzeichen (eigene SVG-Zeichnung): Verlauf Gold, dunkle Kontur, leichtes Leuchten
+export const RUF = `<span class="ruf" title="Neu – noch nicht erledigt" aria-label="ungelesen"><svg viewBox="0 0 24 40" aria-hidden="true">
+  <defs><linearGradient id="rufG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6a8"/><stop offset=".45" stop-color="#ffd23a"/><stop offset="1" stop-color="#e48a00"/></linearGradient></defs>
+  <path d="M6.2 3.5 Q12 1.2 17.8 3.5 L15 25.5 Q12 27 9 25.5 Z" fill="url(#rufG)" stroke="#2a1600" stroke-width="2.2" stroke-linejoin="round"/>
+  <ellipse cx="12" cy="33.2" rx="4.4" ry="4.1" fill="url(#rufG)" stroke="#2a1600" stroke-width="2.2"/>
+  <path d="M8.6 5.4 Q10.5 4.6 12 4.6 L11 19" fill="none" stroke="#fffbe0" stroke-width="1.3" stroke-linecap="round" opacity=".75"/>
+</svg></span>`;
 
 export const hasGuide = g => !!g && Object.values(g.sections || {}).some(t => t && t.trim());
 export const guideVersion = g => Number(g?.version || 1);
@@ -37,8 +43,7 @@ export async function confirmRead(myDoc, bossId, guide) {
 /** Lese-Dokument → Roster-Spieler (Offi-Zuordnung > Name = Charaktername/Name) */
 export function playerFor(doc, players) {
   if (doc.playerId) return players.find(p => p.id === doc.playerId) || null;
-  const n = String(doc.name || '').trim().toLowerCase();
-  return players.find(p => String(p.charName || '').toLowerCase() === n || String(p.name).toLowerCase() === n) || null;
+  return matchPlayer(players, doc.name);
 }
 
 /** Status eines Guides für Offis → { read: [{p, doc, at, old}], missing: [p], unmatched: [doc] } */

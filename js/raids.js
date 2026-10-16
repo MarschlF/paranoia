@@ -93,13 +93,43 @@ export function editBoss(boss, { raids = [], raidId = '', nextOrder = 1 } = {}) 
       <div class="field"><label>Kill-Datum</label><input class="input" type="date" name="killDate" value="${esc(b.killDate || '')}"></div>
       <div class="field"><label>Pulls</label><input class="input" type="number" min="0" name="pulls" value="${esc(b.pulls ?? '')}"></div>
       <div class="field"><label>Best Pull (% Boss-HP)</label><input class="input" type="number" step="0.1" min="0" max="100" name="bestPct" value="${esc(b.bestPct ?? '')}"></div>
+      <div class="field full"><label>Titelbild <span class="muted">(oben im Boss Guide)</span></label>
+        <div class="cover-edit">
+          <div class="cover-preview" data-preview><span>${boss ? 'Lade…' : 'Kein Titelbild'}</span></div>
+          <div class="cover-actions">
+            <label class="btn btn-ghost btn-sm">Bild auswählen<input type="file" accept="image/*" data-file hidden></label>
+            <button type="button" class="btn btn-ghost btn-sm" data-clear-cover hidden>Entfernen</button>
+            <span class="hint">Querformat, z. B. Boss-Artwork oder Screenshot aus dem Journal. Wird automatisch verkleinert.</span>
+          </div>
+        </div>
+      </div>
       <div class="field full"><label>Name in Warcraft Logs (nur falls abweichend)</label><input class="input" name="wclName" value="${esc(b.wclName || '')}" placeholder="${esc(b.name || '')}"></div>
       <label class="field full check-row"><input type="checkbox" name="manual" ${b.manual ? 'checked' : ''}> Werte manuell festlegen (Warcraft Logs für diesen Boss ignorieren)</label>
       <p class="hint full">Ohne Häkchen kommen Status, Kill-Datum, Pulls und Best % automatisch aus Warcraft Logs. Die Felder greifen dann nur, solange für den Boss noch kein Log existiert.</p>
     </div>`);
+  // Titelbild liegt getrennt in bossCovers/<id> – so lädt nicht jede Seite alle Bilder mit
+  let cover = '', coverOrig = '';
+  const preview = form.querySelector('[data-preview]'), clearBtn = form.querySelector('[data-clear-cover]');
+  const showCover = () => { preview.innerHTML = cover ? `<img src="${cover}" alt="">` : '<span>Kein Titelbild</span>'; clearBtn.hidden = !cover; };
+  if (boss) {
+    let un = null;
+    un = store.watchDoc('bossCovers', boss.id, d => { cover = coverOrig = coverOk(d?.img) ? d.img : ''; showCover(); setTimeout(() => un?.(), 0); }, () => showCover());
+  }
+  form.querySelector('[data-file]').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    preview.innerHTML = '<span>Wird verarbeitet…</span>';
+    try { cover = await compressImage(f, 1600, 700); showCover(); }
+    catch (err) { console.error(err); preview.innerHTML = '<span>Bild konnte nicht gelesen werden</span>'; }
+  };
+  clearBtn.onclick = () => { cover = ''; showCover(); };
+
   const actions = [{ label: 'Abbrechen' }];
   if (boss) actions.unshift({ label: 'Löschen', cls: 'btn-danger', onClick: async () => {
-    if (await confirmModal(`${boss.name} löschen?`, 'Der Boss wird aus Progress und Boss Guides entfernt.')) { await store.remove('bosses', boss.id); toast('Gelöscht'); }
+    if (await confirmModal(`${boss.name} löschen?`, 'Der Boss wird aus Progress und Boss Guides entfernt.')) {
+      await store.remove('bosses', boss.id);
+      if (coverOrig) await store.remove('bossCovers', boss.id).catch(() => {});
+      toast('Gelöscht');
+    }
   } });
   actions.push({ label: 'Speichern', cls: 'btn-primary', onClick: async () => {
     const v = n => form.querySelector(`[name=${n}]`).value;
@@ -111,15 +141,33 @@ export function editBoss(boss, { raids = [], raidId = '', nextOrder = 1 } = {}) 
       wclName: v('wclName').trim(),
       manual: form.querySelector('[name=manual]').checked,
     };
-    if (boss) await store.set('bosses', boss.id, data);
-    else await store.set('bosses', `${data.raidId}--${slug(data.name)}`, data);
+    const id = boss ? boss.id : `${data.raidId}--${slug(data.name)}`;
+    if (cover !== coverOrig || (cover && !b.thumb)) data.thumb = cover ? await makeThumb(cover).catch(() => '') : '';
+    await store.set('bosses', id, data);
+    if (cover !== coverOrig) {
+      if (cover) await store.set('bossCovers', id, { img: cover });
+      else await store.remove('bossCovers', id);
+    }
     toast('Gespeichert');
   } });
   openModal({ title: boss ? boss.name : 'Neuer Boss', body: form, actions });
 }
 
+/** Kleines Vorschaubild (für Startseite/Progress) aus einem data-URL-Bild – oberer Bereich bleibt im Bild */
+export async function makeThumb(dataUrl, w = 240, h = 136) {
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl; });
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const k = Math.max(w / img.width, h / img.height);
+  const sw = w / k, sh = h / k;
+  const sx = (img.width - sw) / 2, sy = Math.max(0, Math.min(img.height - sh, (img.height - sh) * 0.18));
+  c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+  let d = c.toDataURL('image/webp', 0.72);
+  if (!d.startsWith('data:image/webp')) d = c.toDataURL('image/jpeg', 0.75);
+  return d;
+}
+
 /** Bild verkleinern (max. 1600×900) und als WebP/JPEG-data-URL zurückgeben – passt so in die Datenbank */
-export async function compressImage(file, maxW = 1600, maxH = 900) {
+export async function compressImage(file, maxW = 1600, maxH = 900, maxLen = 700000) {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
@@ -130,7 +178,7 @@ export async function compressImage(file, maxW = 1600, maxH = 900) {
     for (const q of [0.82, 0.7, 0.55, 0.4]) {
       let d = c.toDataURL('image/webp', q);
       if (!d.startsWith('data:image/webp')) d = c.toDataURL('image/jpeg', q);
-      if (d.length < 700000) return d;
+      if (d.length < maxLen) return d;
     }
     throw new Error('Bild zu groß');
   } finally { URL.revokeObjectURL(url); }
@@ -157,6 +205,11 @@ export function raidCardsHtml(raids, settings, { href, meta, isOfficer }) {
         ${isOfficer ? `<button class="icon-btn raid-edit" data-edit-raid="${esc(r.id)}" title="Raid bearbeiten">✎</button>` : ''}
       </a>`;
   }).join('');
+}
+
+/** Alle Boss-Titelbilder beobachten → { bossId: dataUrl } (Raider ohne Zugriff bekommen einfach {}) */
+export function watchBossCovers(cb) {
+  return store.watchCol('bossCovers', cs => cb(Object.fromEntries(cs.filter(c => coverOk(c.img)).map(c => [c.id, c.img]))), () => cb({}));
 }
 
 /** Banner oben auf der Raid-Detailseite */
