@@ -1,9 +1,9 @@
 // ─────────────────────────────────────────────────────────────
 //  Vergleich (Intern): zwei Spieler auf einem Boss gegenüberstellen
-//  DPS/HPS + Parse, Stats, Gear und Talente aus Warcraft Logs
+//  DPS/HPS + Parse, aktive Zeit, Fähigkeiten (CPM), Stats, Gear und Talente aus Warcraft Logs
 // ─────────────────────────────────────────────────────────────
 import { store, auth } from '../store.js';
-import { CLASSES, clsColor, esc, h, specImg, fmtDate, matchPlayer, sortPlayers, itemIcon, refreshTooltips } from '../ui.js';
+import { CLASSES, clsColor, esc, h, specImg, fmtDate, matchPlayer, sortPlayers, itemIcon, refreshTooltips, iconUrl } from '../ui.js';
 import { getWcl } from '../wcl.js';
 import { getCompare } from '../compare.js';
 
@@ -19,6 +19,8 @@ const STATS = [
   ['Lebensraub', s => s.leech || 0],
 ];
 const DIFFS = { 5: 'Mythic', 4: 'Heroic' };
+const SAME = { spec: 'Gleiche Spec', klasse: 'Gleiche Klasse', alle: 'Alle Spieler' };
+const ENCH_SLOTS = ['head', 'shoulder', 'chest', 'feet', 'finger1', 'finger2', 'mainhand'];
 
 export function render(root) {
   const el = h(`
@@ -27,7 +29,7 @@ export function render(root) {
         <div>
           <div class="eyebrow">Intern</div>
           <h2 class="page-title">Vergleich</h2>
-          <p class="page-sub">Zwei Spieler auf einem Boss: Schaden, Stats, Gear und Talente – aus dem letzten Kill (oder dem besten Pull) in Warcraft Logs.</p>
+          <p class="page-sub">Zwei Spieler auf einem Boss: Schaden, aktive Zeit, Fähigkeiten, Stats, Gear und Talente – aus dem letzten Kill (oder dem besten Pull) in Warcraft Logs.</p>
         </div>
       </div>
       <div class="card card-pad cmp-controls">
@@ -36,7 +38,7 @@ export function render(root) {
         <div class="field"><label>Spieler 1</label><select class="select" data-a></select></div>
         <button class="btn btn-ghost cmp-swap" data-swap title="Tauschen">⇄</button>
         <div class="field"><label>Spieler 2</label><select class="select" data-b></select></div>
-        <label class="check-row cmp-same"><input type="checkbox" data-same checked> nur gleiche Klasse</label>
+        <div class="field" style="max-width:160px"><label>Vorschlagen</label><select class="select" data-same>${Object.entries(SAME).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       </div>
       <div data-out><div class="loading">Lade…</div></div>
     </div>`);
@@ -45,7 +47,8 @@ export function render(root) {
 
   let settings = null, players = [], wcl, sel = {
     enc: ss.get('pn-cmp-enc') || '', diff: ss.get('pn-cmp-diff') || '5', a: ss.get('pn-cmp-a') || '', b: ss.get('pn-cmp-b') || '',
-  }, run = 0;
+    same: SAME[ss.get('pn-cmp-same')] ? ss.get('pn-cmp-same') : 'spec',
+  }, run = 0, gearAll = false;
 
   const active = () => sortPlayers(players.filter(p => p.active !== false));
   const pById = id => players.find(p => p.id === id);
@@ -61,8 +64,15 @@ export function render(root) {
 
     if (!sel.a) sel.a = matchPlayer(active(), auth.user?.name)?.id || active()[0]?.id || '';
     const A = pById(sel.a);
-    const same = $('[data-same]').checked;
-    const listB = active().filter(p => p.id !== sel.a && (!same || !A || p.klasse === A.klasse));
+    $('[data-same]').value = sel.same;
+    // Spieler 2: je nach Auswahl nur gleiche Spec / Klasse; gibt es niemanden mit gleicher Spec, dann gleiche Klasse
+    const others = active().filter(p => p.id !== sel.a);
+    let listB = others;
+    if (A && sel.same !== 'alle') {
+      const sameCls = others.filter(p => p.klasse === A.klasse);
+      const sameSpec = sameCls.filter(p => p.spec === A.spec);
+      listB = sel.same === 'spec' && sameSpec.length ? [...sameSpec, ...sameCls.filter(p => p.spec !== A.spec)] : sameCls;
+    }
     if (!listB.some(p => p.id === sel.b)) sel.b = listB[0]?.id || '';
     const opt = (p, cur) => `<option value="${esc(p.id)}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)} · ${esc(p.spec || CLASSES[p.klasse]?.name || '')}</option>`;
     $('[data-a]').innerHTML = active().map(p => opt(p, sel.a)).join('');
@@ -74,8 +84,8 @@ export function render(root) {
   $('[data-diff]').onchange = e => { sel.diff = e.target.value; remember(); load(); };
   $('[data-a]').onchange = e => { sel.a = e.target.value; controls(); remember(); load(); };
   $('[data-b]').onchange = e => { sel.b = e.target.value; remember(); load(); };
-  $('[data-same]').onchange = () => { controls(); remember(); load(); };
-  $('[data-swap]').onclick = () => { [sel.a, sel.b] = [sel.b, sel.a]; $('[data-same]').checked = false; controls(); remember(); load(); };
+  $('[data-same]').onchange = e => { sel.same = e.target.value; controls(); remember(); load(); };
+  $('[data-swap]').onclick = () => { [sel.a, sel.b] = [sel.b, sel.a]; if (sel.same !== 'alle' && pById(sel.a)?.klasse !== pById(sel.b)?.klasse) sel.same = 'alle'; controls(); remember(); load(); };
 
   async function load() {
     const out = $('[data-out]');
@@ -84,7 +94,7 @@ export function render(root) {
     if (!sel.enc || !A) { out.innerHTML = '<div class="empty">Boss und Spieler wählen.</div>'; return; }
     const id = ++run;
     out.innerHTML = '<div class="loading">Hole die Pulls aus Warcraft Logs… (beim ersten Mal ein paar Sekunden)</div>';
-    const data = await getCompare({ enc: sel.enc, diff: sel.diff, since: settings.startDate, a: charName(A), b: charName(B) });
+    const data = await getCompare({ enc: sel.enc, diff: sel.diff, since: settings.startDate, a: charName(A), b: charName(B), specA: A.spec, specB: B?.spec });
     if (id !== run) return;
     if (!data?.players) { out.innerHTML = '<div class="empty">Vergleich konnte nicht geladen werden.</div>'; return; }
     draw(A, B, data.players[charName(A)], B ? data.players[charName(B)] : null, data.demo);
@@ -118,29 +128,66 @@ export function render(root) {
     const lead = va === vb ? null : va > vb ? [A, va / vb - 1] : [B, vb / va - 1];
     const together = a.together && b.together;
 
+    // Zeile mit zwei Balken (links Spieler 1, rechts Spieler 2)
+    const nf = (v, d = 0) => Number(v).toLocaleString('de-AT', { maximumFractionDigits: d, minimumFractionDigits: d });
+    const pairRow = (label, x, y, { fmt = v => nf(v), max = Math.max(x, y, 1), mid = '' } = {}) => `<div class="st-row">
+        <span class="st-v ${x > y ? 'win' : ''}">${x == null ? '–' : fmt(x)}</span>
+        <div class="st-bar l"><span style="width:${(x || 0) / max * 100}%"></span></div>
+        <span class="st-l">${mid || label}</span>
+        <div class="st-bar r"><span style="width:${(y || 0) / max * 100}%"></span></div>
+        <span class="st-v r ${y > x ? 'win' : ''}">${y == null ? '–' : fmt(y)}</span>
+      </div>`;
+
     // Stats
     const statRows = STATS.map(([label, f]) => [label, f(a.stats), f(b.stats)]).filter(([, x, y]) => x || y);
-    const statsHtml = statRows.map(([label, x, y]) => {
-      const max = Math.max(x, y, 1);
-      return `<div class="st-row">
-        <span class="st-v ${x > y ? 'win' : ''}">${x.toLocaleString('de-AT')}</span>
-        <div class="st-bar l"><span style="width:${x / max * 100}%"></span></div>
-        <span class="st-l">${label}</span>
-        <div class="st-bar r"><span style="width:${y / max * 100}%"></span></div>
-        <span class="st-v r ${y > x ? 'win' : ''}">${y.toLocaleString('de-AT')}</span>
-      </div>`;
-    }).join('');
+    const statsHtml = statRows.map(([label, x, y]) => pairRow(label, x, y)).join('');
 
-    // Gear
+    // Spielweise: aktive Zeit + Casts pro Minute
+    const hasPlay = a.activePct != null || b.activePct != null || a.cpm || b.cpm;
+    const playHtml = (a.activePct != null || b.activePct != null ? pairRow('Aktive Zeit', a.activePct, b.activePct, { fmt: v => nf(v, 1) + ' %', max: 100 }) : '')
+      + (a.cpm || b.cpm ? pairRow('Casts pro Minute', a.cpm, b.cpm, { fmt: v => nf(v, 1) }) : '');
+
+    // Fähigkeiten: gleiche Fähigkeit nebeneinander, Anteil als Balken, CPM als Zahl
+    const abA = a.abilities || [], abB = b.abilities || [];
+    const abIds = [...new Set([...abA.map(x => x.id), ...abB.map(x => x.id)])];
+    const abRows = abIds.map(id => ({ x: abA.find(q => q.id === id), y: abB.find(q => q.id === id) }))
+      .sort((p, q) => Math.max(q.x?.share || 0, q.y?.share || 0) - Math.max(p.x?.share || 0, p.y?.share || 0));
+    const maxShare = Math.max(1, ...abRows.map(r => Math.max(r.x?.share || 0, r.y?.share || 0)));
+    const abCell = (q, other, right) => {
+      if (!q) return `<div class="ab-cell ${right ? 'r' : ''} none"><span class="muted">nicht genutzt</span></div>`;
+      const more = other && q.cpm > other.cpm * 1.15 && q.cpm - other.cpm >= 0.3;
+      return `<div class="ab-cell ${right ? 'r' : ''}">
+        <span class="ab-cpm ${more ? 'win' : ''}" title="${q.casts} Casts">${q.cpm ? nf(q.cpm, 1) : '–'}<small>/min</small></span>
+        <div class="ab-bar"><span style="width:${q.share / maxShare * 100}%"></span></div>
+        <span class="ab-share">${nf(q.share, 1)} %</span>
+      </div>`;
+    };
+    const abIcon = q => `<img class="ab-ico" src="${iconUrl(q.icon)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`;
+    const abHtml = abRows.map(({ x, y }) => {
+      const q = x || y;
+      return `<div class="ab-row ${!x || !y ? 'only' : ''}">${abCell(x, y)}<div class="ab-name">${abIcon(q)}<span>${esc(q.name)}</span></div>${abCell(y, x, true)}</div>`;
+    }).join('');
+    const onlyA = abRows.filter(r => r.x && !r.y).length, onlyB = abRows.filter(r => r.y && !r.x).length;
+
+    // Gear (kompakt: gleiche Items ausgeblendet)
     const slots = Object.keys(SLOT_DE).filter(s => a.gear.some(g => g.slot === s) || b.gear.some(g => g.slot === s));
     const avg = g => g.length ? (g.reduce((s, x) => s + (x.ilvl || 0), 0) / g.length) : 0;
+    const noEnch = g => ENCH_SLOTS.filter(s => g.some(x => x.slot === s && !x.ench)).length;
+    const tier = g => g.filter(x => x.set).length;
     const gearCell = (g, other, right) => g ? `<div class="gc ${right ? 'r' : ''}">${itemIcon(g, 34)}<b class="${other && g.ilvl > other.ilvl ? 'win' : ''}">${g.ilvl}</b>${g.ench ? '<span class="gc-e" title="Verzaubert">✦</span>' : ''}${g.set ? '<span class="gc-t" title="Tier-Set">Set</span>' : ''}</div>` : '<span class="muted">–</span>';
+    let hiddenSame = 0;
     const gearHtml = slots.map(s => {
       const x = a.gear.find(g => g.slot === s), y = b.gear.find(g => g.slot === s);
-      const same = x && y && x.id && x.id === y.id;
-      const differ = !same && (!x || !y || x.id || y.id);
+      const same = x && y && x.id && x.id === y.id && x.ilvl === y.ilvl;
+      if (same && !gearAll) { hiddenSame++; return ''; }
+      const differ = !same;
       return `<div class="gr-row ${differ ? 'diff' : ''}">${gearCell(x, y)}<span class="gr-slot">${SLOT_DE[s]}${same ? ' <span class="muted">· gleich</span>' : ''}</span>${gearCell(y, x, true)}</div>`;
     }).join('');
+    const gearSum = pairRow('Ø Itemlevel', Math.round(avg(a.gear) * 10) / 10, Math.round(avg(b.gear) * 10) / 10, { fmt: v => nf(v, 1), max: Math.max(avg(a.gear), avg(b.gear), 1) })
+      + `<div class="gear-chips">
+          <span class="gchip" style="--c:${clsColor(A.klasse)}">${esc(A.name)}: ${tier(a.gear)}× Set${noEnch(a.gear) ? ` · <b class="bad">${noEnch(a.gear)} ohne Verzauberung</b>` : ' · alles verzaubert'}</span>
+          <span class="gchip" style="--c:${clsColor(B.klasse)}">${esc(B.name)}: ${tier(b.gear)}× Set${noEnch(b.gear) ? ` · <b class="bad">${noEnch(b.gear)} ohne Verzauberung</b>` : ' · alles verzaubert'}</span>
+        </div>`;
 
     // Talente
     const ta = new Set(a.talents), tb = new Set(b.talents);
@@ -151,6 +198,14 @@ export function render(root) {
       <div class="cmp-grid">${head(A, a)}${head(B, b)}</div>
       <div class="cmp-verdict">${lead ? `<b style="color:${clsColor(lead[0].klasse)}">${esc(lead[0].name)}</b> macht <b>${Math.round(lead[1] * 100)} %</b> mehr ${healer(lead[0]) ? 'Heilung' : 'Schaden'}` : 'Gleich viel'}
         ${together ? ' · <span class="ok">im selben Pull</span>' : ' · <span class="muted">unterschiedliche Pulls – Vergleich nur grob</span>'}${demo ? ' · <span class="muted">Beispieldaten</span>' : ''}</div>
+      ${hasPlay || abRows.length ? `<div class="card card-pad cmp-play">
+        <div class="comp-section-title">Spielweise</div>
+        <div class="st-names"><span style="color:${clsColor(A.klasse)}">${esc(A.name)}</span><span style="color:${clsColor(B.klasse)}">${esc(B.name)}</span></div>
+        ${playHtml}
+        ${abRows.length ? `<div class="ab-head"><span>CPM · Anteil am ${healer(A) ? 'Heilen' : 'Schaden'}</span><span>Fähigkeit</span><span>Anteil · CPM</span></div>
+          <div class="ab-list">${abHtml}</div>
+          <p class="hint" style="margin-top:10px">CPM = Casts pro Minute. Grün = drückt die Fähigkeit deutlich öfter (mehr als 15 %).${onlyA || onlyB ? ` Nur bei einem genutzt: ${onlyA ? `${onlyA}× ${esc(A.name)}` : ''}${onlyA && onlyB ? ', ' : ''}${onlyB ? `${onlyB}× ${esc(B.name)}` : ''}.` : ''}</p>` : '<p class="muted" style="margin-top:8px">Keine Fähigkeiten im Log.</p>'}
+      </div>` : ''}
       <div class="cmp-cols">
         <div class="card card-pad">
           <div class="comp-section-title">Stats im Pull</div>
@@ -170,10 +225,13 @@ export function render(root) {
         </div>
       </div>
       <div class="card card-pad" style="margin-top:16px">
-        <div class="comp-section-title">Gear im Pull <span class="muted">· Ø ${avg(a.gear).toFixed(1)} vs. ${avg(b.gear).toFixed(1)}</span></div>
-        <div class="gear-cmp">${gearHtml}</div>
-        <p class="hint" style="margin-top:10px">Maus über ein Item = Tooltip von Wowhead. Farbig hinterlegt = unterschiedliches Item.</p>
+        <div class="cmp-gear-head"><div class="comp-section-title">Gear im Pull</div>
+          <div class="seg"><button class="${gearAll ? '' : 'on'}" data-gear="diff">Nur Unterschiede</button><button class="${gearAll ? 'on' : ''}" data-gear="all">Alle Slots</button></div></div>
+        ${gearSum}
+        <div class="gear-cmp">${gearHtml || '<p class="muted">Komplett gleiches Gear.</p>'}</div>
+        <p class="hint" style="margin-top:10px">${hiddenSame ? `${hiddenSame} Slots mit identischem Item ausgeblendet · ` : ''}Maus über ein Item = Tooltip von Wowhead.</p>
       </div>`;
+    out.querySelectorAll('[data-gear]').forEach(b2 => b2.onclick = () => { gearAll = b2.dataset.gear === 'all'; draw(A, B, a, b, demo); });
     refreshTooltips();
   }
 

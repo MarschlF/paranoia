@@ -4,6 +4,7 @@ import { openPlayerManager, openPlayerForm } from '../players.js';
 import { getRio, charKey, charOf, realmSlug } from '../rio.js';
 import { presencePlayer, isOnline, ago } from '../presence.js';
 import { specFx, attachFx } from '../specfx.js';
+import { classStripHtml, bindClassStrip } from '../classstrip.js';
 
 export function render(root) {
   const el = h(`
@@ -16,17 +17,27 @@ export function render(root) {
         </div>
         <div class="page-actions">${auth.isOfficer ? '<button class="btn btn-ghost" data-manage>Spieler verwalten</button>' : ''}</div>
       </div>
+      <div class="card roster-cls hidden" data-cls-strip></div>
       <div data-list><div class="loading">Lade Roster…</div></div>
     </div>`);
   root.appendChild(el);
   el.querySelector('[data-manage]')?.addEventListener('click', openPlayerManager);
 
-  let players = [], pres = [], reads = [], raidName = '';
+  let players = [], pres = [], reads = [], raidName = '', clsFilter = '';
 
   const draw = () => {
     const active = players.filter(p => p.active !== false);
-    el.querySelector('[data-sub]').textContent = `${active.length} Raider`;
-    const shown = active;
+    const cnt = r => active.filter(p => r.includes(p.rolle)).length;
+    el.querySelector('[data-sub]').textContent = `${active.length} Raider · ${cnt(['Tank'])} Tanks · ${cnt(['Healer'])} Heiler · ${cnt(['mDD', 'rDD'])} DPS`;
+    // Klassen-Leiste: Hover zeigt die Spieler, Klick filtert das Roster
+    if (clsFilter && !active.some(p => p.klasse === clsFilter)) clsFilter = '';
+    const strip = el.querySelector('[data-cls-strip]');
+    strip.classList.toggle('hidden', !active.length);
+    strip.innerHTML = `<div class="rc-head"><span class="rc-title">Klassen</span>${clsFilter ? `<button class="btn btn-ghost btn-sm" data-cls-reset>Filter: ${esc(CLASSES[clsFilter]?.name || clsFilter)} ✕</button>` : '<span class="muted rc-hint">Klick auf eine Klasse filtert</span>'}</div>${classStripHtml(active, { asLink: false, active: clsFilter })}`;
+    bindClassStrip(strip);
+    strip.querySelectorAll('[data-cls]').forEach(b => b.onclick = () => { clsFilter = clsFilter === b.dataset.cls ? '' : b.dataset.cls; draw(); });
+    strip.querySelector('[data-cls-reset]')?.addEventListener('click', () => { clsFilter = ''; draw(); });
+    const shown = clsFilter ? active.filter(p => p.klasse === clsFilter) : active;
     const list = el.querySelector('[data-list]');
     if (!players.length && auth.isOfficer) {
       list.innerHTML = `<div class="empty"><div class="big">📥</div><p style="margin-bottom:14px">Noch keine Daten in der Datenbank.</p>

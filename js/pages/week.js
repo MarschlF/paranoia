@@ -4,8 +4,9 @@
 //  Anforderung (z. B. 4 Keys ab +10) unter settings/main.weekReq
 // ─────────────────────────────────────────────────────────────
 import { store } from '../store.js';
-import { STATUSES, clsColor, esc, h, specImg, sortPlayers, fmtShort, parseIso, WD, raidDates, toast } from '../ui.js';
+import { STATUSES, clsColor, esc, h, specImg, sortPlayers, fmtShort, parseIso, WD, raidDates, toast, fold } from '../ui.js';
 import { getWeek, weekRange, vaultSlots } from '../wowaudit.js';
+import { effAtt } from '../autorota.js';
 
 export function gearTabs(active) {
   return `<div class="guide-tabs" style="margin-bottom:18px">
@@ -93,11 +94,12 @@ export function render(root) {
     const used = new Set();
     const raidDays = raidDates(settings).filter(d => d >= rg.from && d <= rg.to && d <= isoToday());
     const rows = sortPlayers(active).map(p => {
-      const c = byName.get(String(p.charName || p.name).toLowerCase()) || byName.get(p.name.toLowerCase()) || null;
+      const c = byName.get(String(p.charName || p.name).toLowerCase()) || byName.get(p.name.toLowerCase())
+        || data.characters.find(x => fold(x.name) === fold(p.charName || p.name)) || null;
       if (c) used.add(c.name.toLowerCase());
       const keys = c?.keys || [];
       const good = keys.filter(k => k >= req.level).length;
-      const raid = raidDays.filter(d => days[d]?.att?.[p.id] === 'X').length;
+      const raid = raidDays.filter(d => effAtt(days[d], p.id) === 'X').length;
       return { p, c, keys, good, ok: good >= req.keys, vault: vaultSlots(keys), raid };
     });
     rows.sort((a, b) => (a.c ? 0 : 1) - (b.c ? 0 : 1) || Number(a.ok) - Number(b.ok) || a.good - b.good || a.p.name.localeCompare(b.p.name));

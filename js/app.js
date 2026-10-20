@@ -7,43 +7,53 @@ import { DEMO_MODE } from './config.js';
 import { RUF, hasGuide, isRead, watchMine } from './guidereads.js';
 import { watchMyAnswer } from './polls.js';
 import { startPresence, isOnline, presencePlayer, ago } from './presence.js';
+import { watchStatus } from './status.js';
 import * as polls from './pages/polls.js';
 import { raidBosses, raidDates, todayIso, parseIso, WD } from './ui.js';
 
 import * as home from './pages/home.js';
 import * as roster from './pages/roster.js';
 import * as progress from './pages/progress.js';
-import * as tracker from './pages/tracker.js';
 import * as guides from './pages/guides.js';
 import * as useful from './pages/useful.js';
 import * as logs from './pages/logs.js';
 import * as vods from './pages/vods.js';
-import * as comp from './pages/comp.js';
 import * as gear from './pages/gear.js';
 import * as compare from './pages/compare.js';
+import * as apply from './pages/apply.js';
+import * as applications from './pages/applications.js';
+import * as legal from './pages/legal.js';
+import * as planning from './pages/planning.js';
 
 const ROUTES = {
   // access: public = alle · member = Raider auf dem Discord · officer = nur Offiziere
   '':           { page: home,     access: 'public' },
   'roster':     { page: roster,   access: 'public' },
   'progress':   { page: progress, access: 'public' },
+  'bewerben':   { page: apply,    access: 'public' },
+  'bewerbungen':{ page: applications, access: 'officer' },
+  'rechtliches':{ page: legal,    access: 'public' },
   'guides':     { page: guides,   access: 'member' },
   'vergleich':  { page: compare,  access: 'member' },
   'umfragen':   { page: polls,    access: 'member' },
   'nuetzliches':{ page: useful,   access: 'member' },
   'gear':       { page: gear,     access: 'officer' },
-  'rotation':   { page: tracker,  access: 'officer', args: { mode: 'rotation' } },
-  'loot':       { page: tracker,  access: 'officer', args: { mode: 'loot' } },
+  'planung':    { page: planning, access: 'officer' },   // Reiter: Comp | Rotation | Loot
   'logs':       { page: logs,     access: 'member' },
   'vods':       { page: vods,     access: 'officer' },
-  'comp':       { page: comp,     access: 'officer' },
 };
 
 const app = document.getElementById('app');
+app.classList.add('compact');   // schmale Seitenköpfe überall (Home & Bewerben haben eigene Köpfe)
 let cleanup = null;
 
+const MOVED = { comp: 'planung/comp', rotation: 'planung/rotation', loot: 'planung/loot' };   // alte Links weiterleiten
 function parseRoute() {
-  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  let parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  if (MOVED[parts[0]]) {
+    parts = [...MOVED[parts[0]].split('/'), ...parts.slice(1)];
+    history.replaceState(null, '', '#/' + parts.join('/'));
+  }
   return { key: parts[0] || '', params: parts.slice(1) };
 }
 
@@ -108,7 +118,7 @@ function renderOfficerWall() {
       <div class="card wall">
         <div class="lock">🛡️</div>
         <h2>Offi-Bereich</h2>
-        <p>Comp, Rotation, Loot, Gear und VoDs sind nur für Offiziere sichtbar.</p>
+        <p>Raidplanung, Gear, VoDs und Bewerbungen sind nur für Offiziere sichtbar.</p>
         <a href="#/guides" class="btn btn-ghost">Zu den Boss Guides</a>
       </div>
     </div>`));
@@ -120,6 +130,7 @@ function renderAuth(u) {
   const box = document.getElementById('nav-auth');
   document.querySelectorAll('.nav-internal:not(.nav-officer) a').forEach(a => a.classList.toggle('locked', !u?.member));
   document.getElementById('nav-officer').classList.toggle('hidden', !u?.officer);
+  document.querySelector('[data-route="bewerben"]')?.classList.toggle('hidden', !!u?.member && !DEMO_MODE);   // Mitglieder brauchen den Link nicht (Demo zeigt ihn)
   if (!u) {
     box.innerHTML = `<button class="btn btn-discord btn-sm">${DISCORD_SVG} Login</button>`;
     box.querySelector('button').onclick = () => auth.login();
@@ -129,16 +140,34 @@ function renderAuth(u) {
     ? `<img src="${esc(u.avatar)}" alt="">`
     : `<img alt="" src="data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'><rect width='28' height='28' fill='#1c2330'/><text x='14' y='19' font-size='13' text-anchor='middle' fill='#a3adbd' font-family='sans-serif'>${esc(u.name[0] || '?')}</text></svg>`)}">`;
   box.innerHTML = `
-    ${u.officer ? '<div class="online-wrap" id="online-wrap"></div>' : ''}
-    <div class="user-chip">
-      ${avatar}
-      <span class="name">${esc(u.name)}</span>
-      <span class="role-badge ${u.officer ? 'role-officer' : 'role-member'}">${u.officer ? 'Offizier' : 'Raider'}</span>
-      ${DEMO_MODE ? '' : '<button class="icon-btn" title="Logout" data-logout>⎋</button>'}
+    ${u.officer ? '<div class="online-wrap status-wrap" id="status-wrap"></div><div class="online-wrap" id="online-wrap"></div>' : ''}
+    <div class="user-wrap">
+      <button class="user-chip" data-user aria-haspopup="true" aria-expanded="false" title="Konto">
+        ${avatar}
+        <span class="name">${esc(u.name)}</span>
+        <span class="role-badge ${u.officer ? 'role-officer' : 'role-member'}">${u.officer ? 'Offizier' : 'Raider'}</span>
+        <svg class="uc-caret" width="12" height="12" viewBox="0 0 12 12"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="user-menu" data-umenu hidden>
+        <div class="um-head">${avatar}<div><div class="um-name">${esc(u.name)}</div><div class="um-role ${u.officer ? 'off' : ''}">${u.officer ? 'Offizier' : 'Raider'} · über Discord angemeldet</div></div></div>
+        <button class="um-item um-logout" data-logout>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+          Abmelden
+        </button>
+      </div>
     </div>
     ${DEMO_MODE ? `<button class="btn btn-ghost btn-sm" data-demo-role title="Nur im Demo-Modus">${u.officer ? 'Raider' : 'Offi'}-Ansicht</button>` : ''}`;
   box.querySelector('[data-demo-role]')?.addEventListener('click', () => auth.setDemoRole(!u.officer));
-  box.querySelector('[data-logout]')?.addEventListener('click', () => auth.logout());
+  // Konto-Menü: Klick auf den Chip öffnet, Klick daneben / Esc schließt
+  const chip = box.querySelector('[data-user]'), menu = box.querySelector('[data-umenu]');
+  const setOpen = o => { menu.hidden = !o; chip.setAttribute('aria-expanded', String(o)); chip.classList.toggle('open', o); };
+  chip.onclick = e => { e.stopPropagation(); setOpen(menu.hidden); };
+  document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target)) setOpen(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') setOpen(false); });
+  box.querySelector('[data-logout]').addEventListener('click', () => {
+    if (DEMO_MODE) { setOpen(false); import('./ui.js').then(m => m.toast('Im Demo-Modus gibt es kein Abmelden')); return; }
+    auth.logout();
+  });
   watchOnline(u);
 }
 
@@ -191,6 +220,7 @@ function watchFooter() {
 
 // ── Start ───────────────────────────────────────────────────
 document.getElementById('nav-toggle').onclick = () => document.getElementById('nav-menu').classList.toggle('open');
+
 if (DEMO_MODE) document.getElementById('demo-banner').classList.remove('hidden');
 
 app.innerHTML = '<div class="loading">Lade…</div>';
@@ -211,6 +241,7 @@ const hidden = () => { try { return new Set(JSON.parse(sessionStorage.getItem(NE
 function hideNews(key) { const s = hidden(); s.add(key); try { sessionStorage.setItem(NEWS_HIDE, JSON.stringify([...s])); } catch {} }
 
 const newsShown = new Set();
+let newsOpen = false;          // weitere Popups aufgeklappt?
 function watchGuideBadge(u) {
   badgeStop?.(); badgeStop = null;
   const setBadge = (route, n) => {
@@ -238,7 +269,9 @@ function watchGuideBadge(u) {
       }),
     ].filter(it => !hide.has(it.key) && route !== it.href);
     // Bestehende Popups stehen lassen (sonst bricht die Animation ab), nur neue einfügen / weggefallene entfernen
-    const show = items.slice(0, 3);
+    // Standard: nur EIN Popup, der Rest steckt hinter „+ N weitere“ (deckt sonst Inhalt/Footer zu)
+    if (items.length <= 1) newsOpen = false;
+    const show = items.slice(0, newsOpen ? 4 : 1);
     const keep = new Set(show.map(it => it.key));
     box.querySelectorAll('.news-card').forEach(c => { if (!keep.has(c.dataset.key)) c.remove(); });
     box.querySelector('.news-more')?.remove();
@@ -262,7 +295,12 @@ function watchGuideBadge(u) {
       if (!ok) { if (prev) prev.after(c); else box.prepend(c); }
       prev = c;
     }
-    if (items.length > 3) box.insertAdjacentHTML('beforeend', `<div class="news-more">+ ${items.length - 3} weitere</div>`);
+    if (items.length > 1) {
+      const rest = items.length - show.length;
+      const btn = h(`<button class="news-more">${newsOpen ? (rest > 0 ? `+ ${rest} weitere · ` : '') + 'Einklappen ▾' : `+ ${items.length - 1} weitere anzeigen ▴`}</button>`);
+      btn.onclick = () => { newsOpen = !newsOpen; upd(); };
+      box.appendChild(btn);
+    }
   }
   const un = [
     store.watchCol('bosses', b => { st.bosses = b; upd(); }),
@@ -292,11 +330,26 @@ function watchGuideBadge(u) {
   }
 }
 
+// Offis: Rufzeichen an „Bewerbungen“, solange neue Bewerbungen da sind
+let appStop = null;
+function watchApplications(u) {
+  appStop?.(); appStop = null;
+  const link = document.querySelector('[data-route="bewerbungen"]'); if (!link) return;
+  link.querySelector('.ruf')?.remove();
+  if (!u?.officer) return;
+  appStop = store.watchCol('applications', as => {
+    link.querySelector('.ruf')?.remove();
+    if (as.some(a => a.status === 'neu')) link.insertAdjacentHTML('beforeend', RUF);
+  }, () => {});
+}
+
 let lastMember = null;
 auth.onChange(u => {
   renderAuth(u);
+  watchStatus(u);
   startPresence(u);
   watchGuideBadge(u);
+  watchApplications(u);
   // Nur neu rendern, wenn sich der Zugang tatsächlich ändert
   const member = !!u?.member + ':' + !!u?.officer;
   if (member !== lastMember) { lastMember = member; render(); }

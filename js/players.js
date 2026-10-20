@@ -14,8 +14,8 @@ export function guessRole(klasse, spec) {
 }
 
 /** Formular für neuen / bestehenden Spieler */
-export function openPlayerForm(player = null) {
-  const p = player || { name: '', klasse: 'Warrior', spec: 'Arms', rolle: 'mDD', status: 'Rotation', note: '' };
+export function openPlayerForm(player = null, prefill = null) {
+  const p = player || { name: '', klasse: 'Warrior', spec: 'Arms', rolle: 'mDD', status: 'Rotation', note: '', ...(prefill || {}) };
   const form = h(`
     <div class="form-grid">
       <div class="field full"><label>Name</label><input class="input" name="name" value="${esc(p.name)}" placeholder="Charaktername" autocomplete="off"></div>
@@ -31,6 +31,7 @@ export function openPlayerForm(player = null) {
       </select></div>
       <div class="field"><label>Charaktername <span class="muted">(falls anders)</span></label><input class="input" name="charName" value="${esc(p.charName || '')}" placeholder="genau wie ingame, z. B. Krágy" autocomplete="off"></div>
       <div class="field"><label>Realm <span class="muted">(leer = automatisch)</span></label><input class="input" name="realm" value="${esc(p.realm || '')}" placeholder="z. B. Thrall" autocomplete="off"></div>
+      <div class="field full"><label>Twinks <span class="muted">(kommagetrennt – damit die Rotation sie im Log erkennt)</span></label><input class="input" name="alts" value="${esc((p.alts || []).join(', '))}" placeholder="z. B. Zarthos, Krágymage" autocomplete="off"></div>
     </div>`);
   const kSel = form.querySelector('[name=klasse]'), sSel = form.querySelector('[name=spec]'), rSel = form.querySelector('[name=rolle]');
   const fillSpecs = (keep) => {
@@ -51,6 +52,7 @@ export function openPlayerForm(player = null) {
         data.name = data.name.trim();
         data.charName = (data.charName || '').trim();
         data.realm = (data.realm || '').trim();
+        data.alts = String(data.alts || '').split(',').map(x => x.trim()).filter(Boolean);
         if (player) await store.set('players', player.id, data);
         else await store.add('players', { ...data, active: true });
         toast(player ? 'Gespeichert' : `${data.name} hinzugefügt`);

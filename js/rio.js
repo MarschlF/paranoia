@@ -23,6 +23,7 @@ export const charKey = p => {
 };
 
 let cache = { key: '', at: 0, promise: null };
+const IGNORE_SLOTS = ['shirt', 'tabard'];
 
 /** → { configured, updated, chars: { 'realm/name': {...} | { error } } } oder null */
 export function getRio(players, { force = false } = {}) {
@@ -42,7 +43,9 @@ export function getRio(players, { force = false } = {}) {
       .then(parts => {
         const ok = parts.filter(Boolean);
         if (!ok.length) return null;
-        return { configured: true, updated: ok.map(x => x.updated).sort()[0], chars: Object.assign({}, ...ok.map(x => x.chars || {})) };
+        const chars = Object.assign({}, ...ok.map(x => x.chars || {}));
+        for (const c of Object.values(chars)) if (Array.isArray(c?.items)) c.items = c.items.filter(i => !IGNORE_SLOTS.includes(i.slot));   // Hemd/Wappenrock zählen nicht
+        return { configured: true, updated: ok.map(x => x.updated).sort()[0], chars };
       });
   }
   cache = { key, at: Date.now(), promise: p };

@@ -25,7 +25,13 @@ export const auth = {
     const back = location.origin + location.pathname;
     location.href = `${CONFIG.authWorkerUrl.replace(/\/$/, '')}/login?redirect=${encodeURIComponent(back)}`;
   },
-  async logout() { if (!DEMO_MODE) await fa.signOut(fbAuth); },
+  async logout() {
+    if (DEMO_MODE) return;
+    await fa.signOut(fbAuth);
+    // Zwischenspeicher löschen, damit auf geteilten PCs nichts im Browser bleibt
+    try { await fs.terminate(db); await fs.clearIndexedDbPersistence(db); } catch (e) { console.warn('Cache konnte nicht geleert werden', e); }
+    location.reload();
+  },
   /** Aktuelles Firebase-ID-Token (für geschützte Worker-Aufrufe) */
   async idToken() { return DEMO_MODE ? 'demo' : (await fbAuth.currentUser?.getIdToken()) || ''; },
   /** Nur Demo: zwischen Offizier- und Raider-Ansicht wechseln */
@@ -50,6 +56,8 @@ function loadLocal() {
   if (local.settings?.main && local.settings.main.raidStart === undefined) { Object.assign(local.settings.main, { raidStart: SEED_SETTINGS.raidStart, raidEnd: SEED_SETTINGS.raidEnd }); saveLocal(); }
   if (!local.addons) { local.addons = demoAddons(); saveLocal(); }
   if (!local.presence) { local.presence = demoPresence(); saveLocal(); }
+  if (!local.applications) { local.applications = demoApplications(); local.settings.main.recruit ||= { open: true, classes: ['Evoker', 'Priest', 'Shaman'], text: 'Vor allem Heiler und einen Augmentation-Evoker mit Mythic-Erfahrung.' }; saveLocal(); }
+  if (!local.vodsDemo) { local.vodsDemo = 1; if (!Object.keys(local.vods || {}).length) local.vods = demoVods(local.settings?.main || {}); saveLocal(); }
   // Ältere Demo-Daten auf Raids umstellen
   if (!local.raids) {
     local.raids = {};
@@ -59,6 +67,37 @@ function loadLocal() {
     saveLocal();
   }
 }
+/** Beispiel-VoDs an den letzten Raidabenden (nur Demo) */
+function demoVods(st) {
+  const wd = st.raidWeekdays?.length ? st.raidWeekdays : [2, 4];
+  const dates = [], d = new Date(); d.setDate(d.getDate() - 1);
+  while (dates.length < 4) { if (wd.includes(d.getDay())) dates.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`); d.setDate(d.getDate() - 1); }
+  const start = (date, min) => { const [h, m] = (st.raidStart || '19:45').split(':').map(Number); return new Date(new Date(`${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`).getTime() - min * 60e3).toISOString(); };
+  const at = i => new Date(Date.now() - i * 86400e3).toISOString();
+  const yt = id => `https://www.youtube.com/live/${id}`;
+  return {
+    v1: { date: dates[0], title: 'Mythic Prog Abend', url: yt('pnDemoVod01'), pov: 'Marschl', boss: '', note: 'Callouts in P2 nochmal anhören.', streamStart: start(dates[0], 7), streamSrc: 'youtube', marks: [{ t: 1510, label: 'Ansage Soak-Gruppen neu' }], created: at(1) },
+    v2: { date: dates[0], title: 'Mythic Prog Abend', url: yt('pnDemoVod02'), pov: 'Drea', boss: '', note: '', streamStart: start(dates[0], 3), streamSrc: 'manual', marks: [], created: at(0.9) },
+    v3: { date: dates[1], title: 'Mythic Prog Abend', url: yt('pnDemoVod03'), pov: 'Marschl', boss: '', note: '', streamStart: '', streamSrc: '', marks: [], created: at(4) },
+    v4: { date: dates[3], title: 'Raidabend', url: yt('pnDemoVod04'), pov: 'Marschl', boss: '', note: '', streamStart: start(dates[3], 5), streamSrc: 'youtube', marks: [], created: at(9) },
+  };
+}
+/** Beispiel-Bewerbungen (nur Demo) */
+function demoApplications() {
+  const t = h => new Date(Date.now() - h * 3600000).toISOString();
+  return {
+    a1: { char: 'Lumivoker', realm: 'Blackmoore', klasse: 'Evoker', spec: 'Augmentation', offspec: 'Preservation', discord: 'lumi.aug',
+      exp: 'Letztes Tier 6/8M mit <Nachtschatten>, davor AotC und CE in Dragonflight. Augmentation seit Release.',
+      why: 'Unsere Gilde löst sich auf, ich suche ein festes Mythic-Team mit 2 Raidtagen.', logs: '', allDays: true, avail: '', other: '',
+      consent: true, status: 'neu', at: t(5) },
+    a2: { char: 'Haldrin', realm: 'Todeswache', klasse: 'Priest', spec: 'Holy', offspec: 'Discipline', discord: 'haldrin', exp: '4/8M aktuelles Tier als Holy, 3000er M+ Score.',
+      why: 'Kenne zwei Leute bei euch, habt einen guten Ruf auf dem Server.', logs: '', allDays: false, avail: 'Jeden zweiten Donnerstag erst ab 20:15', other: '',
+      consent: true, status: 'pruefung', at: t(30), votes: { o1: { v: 1, name: 'Drea' } }, notes: [{ text: 'Logs passen, Gespräch am Mittwoch.', by: 'Drea', uid: 'o1', at: t(20) }] },
+    a3: { char: 'Zoltrak', realm: 'Blackhand', klasse: 'Warrior', spec: 'Fury', offspec: '', discord: 'zoltrak', exp: 'Heroic clear, 2/8M.',
+      why: 'Will Mythic raiden.', logs: '', allDays: true, avail: '', other: '', consent: true, status: 'abgelehnt', at: t(120) },
+  };
+}
+
 /** Beispiel: ein paar Raider haben den Guide schon bestätigt (nur Demo) */
 function demoReads() {
   const at = d => new Date(Date.now() - d * 3600000).toISOString();
@@ -167,7 +206,9 @@ export const store = {
     ]);
     fs = firestore; fa = authMod;
     const fbApp = app.initializeApp(CONFIG.firebase);
-    db = fs.getFirestore(fbApp);
+    // Zwischenspeicher im Browser: Seitenwechsel laden nur noch Geändertes (spart Firebase-Kontingent, schneller)
+    try { db = fs.initializeFirestore(fbApp, { localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) }); }
+    catch (e) { console.warn('Firestore-Cache nicht verfügbar', e); db = fs.getFirestore(fbApp); }
     fbAuth = fa.getAuth(fbApp);
 
     // Rückkehr vom Discord-Login: #auth=<token> oder #auth_error=<code>

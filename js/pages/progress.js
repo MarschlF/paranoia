@@ -5,7 +5,7 @@ import { store, auth } from '../store.js';
 import { esc, h, openModal, toast, fmtDate, raidBosses } from '../ui.js';
 import { getWcl, mergeBoss } from '../wcl.js';
 import { openProgCurve } from '../progcurve.js';
-import { BOSS_STATUS, sortRaids, editBoss, editRaid, setCurrentRaid, raidCardsHtml, raidBannerHtml, watchBossCovers } from '../raids.js';
+import { BOSS_STATUS, sortRaids, editBoss, editRaid, setCurrentRaid, adoptSeasonDates, raidCardsHtml, raidBannerHtml, watchBossCovers } from '../raids.js';
 
 export function render(root, { params }) {
   return params[0] ? renderRaid(root, decodeURIComponent(params[0])) : renderOverview(root);
@@ -22,10 +22,12 @@ function watchAll(onChange0) {
     st.wclFor = st.settings.startDate;
     getWcl(st.settings).then(d => { st.wcl = d; onChange(); });
   };
+  let adopted = false;
+  const adopt = () => { if (!adopted && auth.isOfficer && st.raids.length && st.settings.currentRaid) { adopted = true; adoptSeasonDates(st.raids, st.settings); } };
   const unsubs = [
     store.watchCol('bosses', bs => { st.bosses = bs; onChange(); }),
-    store.watchCol('raids', rs => { st.raids = rs; onChange(); }),
-    store.watchDoc('settings', 'main', s => { st.settings = s || {}; onChange(); loadWcl(); }),
+    store.watchCol('raids', rs => { st.raids = rs; onChange(); adopt(); }),
+    store.watchDoc('settings', 'main', s => { st.settings = s || {}; onChange(); loadWcl(); adopt(); }),
   ];
   live = true; queueMicrotask(onChange0);
   return { st, stop: () => unsubs.forEach(u => u()) };
@@ -147,7 +149,7 @@ function editSettings(s, raids, bosses) {
     <div class="form-grid">
       <div class="field full"><label>Aktueller Raid</label>
         <select class="select" name="currentRaid">${sortRaids(raids, s).map(r => `<option value="${esc(r.id)}" ${r.id === s.currentRaid ? 'selected' : ''}>${esc(r.name)}${r.season ? ` · ${esc(r.season)}` : ''}</option>`).join('')}</select>
-        <span class="hint">Neue Season? Über „+ Raid" anlegen und hier auswählen. Alte Raids und ihre Guides bleiben erhalten.</span>
+        <span class="hint">Neue Season? Einfach über „+ Raid“ anlegen – dort Season-Start/-Ende eintragen und „Als aktuellen Raid setzen“ anhaken, dann stellt sich alles automatisch um. Alte Raids und ihre Guides bleiben erhalten.</span>
       </div>
       <div class="field"><label>Season-Start</label><input class="input" type="date" name="startDate" value="${esc(s.startDate || '')}"></div>
       <div class="field"><label>Season-Ende</label><input class="input" type="date" name="endDate" value="${esc(s.endDate || '')}"></div>
@@ -159,6 +161,12 @@ function editSettings(s, raids, bosses) {
         <span class="hint">Die Spalten im Rotation Planer und Loot Tracker werden daraus automatisch erzeugt. Zusätzliche oder ausgefallene Raidtage kannst du direkt im Rotation Planer setzen.</span>
       </div>
     </div>`);
+  // anderen Raid wählen → dessen Zeitraum eintragen
+  form.querySelector('[name=currentRaid]').onchange = e => {
+    const r = raids.find(x => x.id === e.target.value);
+    if (r?.startDate) form.querySelector('[name=startDate]').value = r.startDate;
+    if (r?.endDate) form.querySelector('[name=endDate]').value = r.endDate;
+  };
   form.querySelectorAll('label.chip').forEach(l => l.onclick = (e) => {
     e.preventDefault(); const cb = l.querySelector('input'); cb.checked = !cb.checked; l.classList.toggle('active', cb.checked);
   });
@@ -167,11 +175,13 @@ function editSettings(s, raids, bosses) {
     actions: [{ label: 'Abbrechen' }, { label: 'Speichern', cls: 'btn-primary', onClick: async () => {
       const v = n => form.querySelector(`[name=${n}]`).value;
       const raid = raids.find(r => r.id === v('currentRaid'));
+      if (raid && raid.id !== s.currentRaid) await setCurrentRaid(raid);
       await store.set('settings', 'main', {
         startDate: v('startDate'), endDate: v('endDate'), raidStart: v('raidStart'), raidEnd: v('raidEnd'),
         raidWeekdays: [...form.querySelectorAll('input[type=checkbox]:checked')].map(c => Number(c.value)),
       });
-      if (raid && raid.id !== s.currentRaid) await setCurrentRaid(raid);
+      // Zeitraum gehört zum Raid – dort mitspeichern
+      if (raid) await store.set('raids', raid.id, { startDate: v('startDate'), endDate: v('endDate') });
       toast('Einstellungen gespeichert');
     } }],
   });

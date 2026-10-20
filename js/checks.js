@@ -4,6 +4,7 @@
 //  Einträge: englischer Fähigkeitsname (wie in WCL) oder Spell-ID.
 // ─────────────────────────────────────────────────────────────
 import { CONFIG, DEMO_MODE } from './config.js';
+import { auth } from './store.js';
 
 export const CHECK_GROUPS = [
   { key: 'def', label: 'Defensives', short: 'Def', perPull: true,
@@ -51,7 +52,8 @@ export function getCheck(report, groups, diffLabel) {
   let p;
   if (DEMO_MODE || report.demo) p = new Promise(r => setTimeout(() => r(demoCheck(report, groups, diffLabel)), 120));
   else if (!CONFIG.authWorkerUrl) p = Promise.resolve(null);
-  else p = fetch(`${CONFIG.authWorkerUrl.replace(/\/$/, '')}/wcl/check?code=${encodeURIComponent(report.code)}&diff=${diff}&a=${encodeURIComponent(a.join(','))}`)
+  else p = auth.idToken().then(t => fetch(`${CONFIG.authWorkerUrl.replace(/\/$/, '')}/wcl/check?code=${encodeURIComponent(report.code)}&diff=${diff}&a=${encodeURIComponent(a.join(','))}`,
+      { headers: { Authorization: `Bearer ${t}` } }))   // nur Offis (prüft der Worker)
     .then(r => r.ok ? r.json() : null).catch(() => null);
   p.then(v => { if (!v) mem.delete(key); });
   mem.set(key, p);

@@ -1,11 +1,13 @@
 // ─────────────────────────────────────────────────────────────
 //  Rotation Planer & Loot Tracker (gleiche Tabelle, zwei Modi)
-//  Pro Raidtag ein Dokument: raidDays/<YYYY-MM-DD> { att: {pid: X|B|A}, loot: {pid: n} }
+//  Pro Raidtag ein Dokument: raidDays/<YYYY-MM-DD> { att: {pid: X|B|A|-}, auto: {pid: X|B|A}, loot: {pid: n} }
+//  att = von Hand (gewinnt), auto = aus Warcraft Logs + wowaudit (autorota.js)
 // ─────────────────────────────────────────────────────────────
 import { store, auth } from '../store.js';
 import { STATUSES, ROLES, clsColor, esc, h, specImg, raidDates, todayIso, fmtShort, fmtDate, parseIso, WD, MONTHS, openModal, toast } from '../ui.js';
 import { openPlayerManager } from '../players.js';
 import { openRclcImport } from '../rclc.js';
+import { effAtt, isAuto, syncAutoRotation, lastSync, playerFor } from '../autorota.js';
 
 const ATT_CYCLE = ['', 'X', 'B', 'A'];
 
@@ -22,7 +24,8 @@ export function render(root, { mode }) {
           <p class="page-sub">${isRot ? 'Wer war dabei, wer saß auf der Bank, wer war abgemeldet.' : 'Erhaltene Items pro Raidtag – für faire Loot-Verteilung.'}</p>
         </div>
         <div class="page-actions">
-          ${canEdit && !isRot ? `<button class="btn btn-primary" data-rclc title="Loot-Verlauf aus RCLootCouncil einfügen">RCLC-Import</button>` : ''}
+          ${canEdit && !isRot ? `<a class="btn btn-ghost" href="#/nuetzliches/sims" title="Welche Spec profitiert von welchem Trinket (Bloodmallet)">📊 Trinket-Sims</a>
+                                 <button class="btn btn-primary" data-rclc title="Loot-Verlauf aus RCLootCouncil einfügen">RCLC-Import</button>` : ''}
           ${canEdit ? `<button class="btn btn-ghost" data-manage>Spieler verwalten</button>
                        <button class="btn btn-ghost" data-extra>+ Raidtag</button>` : ''}
         </div>
@@ -34,10 +37,12 @@ export function render(root, { mode }) {
             <span><i class="lg c-X" style="background:var(--venom-dim)"></i>Dabei</span>
             <span><i class="lg c-B" style="background:var(--gold-dim)"></i>Bench</span>
             <span><i class="lg c-A" style="background:var(--red-dim)"></i>Abgemeldet</span>
-            ${canEdit ? '<span class="muted">· Klick = weiterschalten · Rechtsklick = leeren</span>' : ''}`
+            <span><i class="lg lg-auto"></i>automatisch</span>
+            ${canEdit ? '<span class="muted">· Klick = weiterschalten · Rechtsklick = zurück zur Automatik / leeren</span>' : ''}`
           : `${canEdit ? '<span class="muted">Klick = +1 Item · Rechtsklick = −1</span>' : ''}`}
         </div>
         <div class="spacer"></div>
+        ${canEdit ? '<span class="auto-info" data-autoinfo></span><button class="chip" data-autosync title="Rotation aus Warcraft Logs und wowaudit neu füllen">🔄 Automatik</button>' : ''}
         ${!isRot && canEdit ? '<button class="chip" data-minus title="Für Handy: Tippen zieht 1 ab">−1-Modus</button>' : ''}
         <select class="select" data-sort style="width:auto;height:32px;font-size:13px">
           <option value="group">Nach Status</option>
@@ -48,6 +53,7 @@ export function render(root, { mode }) {
         </select>
       </div>
 
+      <div data-um></div>
       <div class="table-wrap" data-wrap><div class="loading">Lade…</div></div>
     </div>`);
   root.appendChild(el);
@@ -70,7 +76,7 @@ export function render(root, { mode }) {
     const last4Days = past.slice(-4);
     for (const d of dates) {
       const day = days[d]; if (!day) continue;
-      const a = day.att?.[p.id];
+      const a = effAtt(day, p.id);
       if (a === 'X') att++;
       if (a === 'B') bench++;
       const l = Number(day.loot?.[p.id] || 0);
@@ -150,8 +156,8 @@ export function render(root, { mode }) {
           const day = days[d];
           const tc = d === nextRaid ? ' today-col' : '';
           if (isRot) {
-            const v = day?.att?.[p.id] || '';
-            return `<td class="${tc}"><div class="cell ${v ? 'c-' + v : ''}" data-p="${p.id}" data-d="${d}"></div></td>`;
+            const v = effAtt(day, p.id), au = v && isAuto(day, p.id);
+            return `<td class="${tc}"><div class="cell ${v ? 'c-' + v : ''} ${au ? 'auto' : ''}" data-p="${p.id}" data-d="${d}" ${au ? `title="automatisch (${v === 'X' ? 'im Log' : v === 'A' ? 'in wowaudit abgesagt' : 'angemeldet, aber nicht im Log'})"` : ''}></div></td>`;
           }
           const n = Number(day?.loot?.[p.id] || 0);
           return `<td class="${tc}"><div class="cell ${n ? 'c-loot' : ''}" data-p="${p.id}" data-d="${d}">${n || ''}</div></td>`;
@@ -160,6 +166,7 @@ export function render(root, { mode }) {
     }
     html += '</tbody></table>';
 
+    drawUnmatched(dates);
     const keepX = wrap.scrollLeft, keepY = wrap.scrollTop;
     wrap.innerHTML = html;
     if (!scrolled) {
@@ -167,6 +174,56 @@ export function render(root, { mode }) {
       const th = wrap.querySelector('th.today');
       if (th) wrap.scrollLeft = Math.max(0, th.offsetLeft - 426 - 4 * 46);
     } else { wrap.scrollLeft = keepX; wrap.scrollTop = keepY; }
+  }
+
+  // ── Automatik (Warcraft Logs + wowaudit) ──────────────────
+  const autoInfo = el.querySelector('[data-autoinfo]');
+  let autoRan = false, autoBusy = false;
+  const showAuto = (txt, cls = '') => { if (autoInfo) { autoInfo.textContent = txt; autoInfo.className = 'auto-info ' + cls; } };
+  const lastTxt = () => { const t = lastSync(); return t ? `Automatik: ${new Date(t).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''; };
+  async function runAuto(opts = {}) {
+    if (!canEdit || autoBusy || !settings || !players.length) return;
+    autoBusy = true; if (opts.force || opts.full) showAuto('Automatik läuft…');
+    try {
+      const r = await syncAutoRotation({ settings, players, days, ...opts });
+      if (!r.ok) showAuto(r.reason === 'none' ? 'Automatik: Warcraft Logs/wowaudit nicht eingerichtet' : r.reason === 'old-worker' ? 'Automatik: Worker noch nicht aktualisiert' : r.reason === 'season' ? '' : 'Automatik nicht erreichbar', 'warn');
+      else {
+        showAuto(lastTxt() + (r.wowaudit === false ? ' · ohne wowaudit' : '') + (r.errors?.length ? ' · teilweise Fehler' : ''), r.errors?.length ? 'warn' : '');
+        if (opts.force || opts.full) toast(r.changed ? `${r.changed} Raidtag${r.changed > 1 ? 'e' : ''} aktualisiert` : 'Schon aktuell');
+      }
+    } catch (e) { console.error(e); showAuto('Automatik fehlgeschlagen', 'warn'); }
+    autoBusy = false;
+  }
+  showAuto(lastTxt());
+  el.querySelector('[data-autosync]')?.addEventListener('click', e => runAuto(e.shiftKey ? { full: true, force: true } : { force: true }));
+  const maybeAuto = () => { if (!autoRan && settings?.startDate && players.length && daysLoaded) { autoRan = true; runAuto(); } };
+
+  /** Hinweis: Namen aus dem Log ohne Spieler (Twinks) – Klick ordnet zu */
+  function drawUnmatched(dates) {
+    const box = el.querySelector('[data-um]'); if (!box) return;
+    if (!canEdit) { box.innerHTML = ''; return; }
+    const seen = new Map();
+    dates.forEach(d => (days[d]?.autoUnmatched || []).forEach(n => { if (!seen.has(n)) seen.set(n, d); }));
+    if (!seen.size) { box.innerHTML = ''; return; }
+    box.innerHTML = `<div class="auto-um">⚠️ Im Log, aber keinem Spieler zugeordnet: ${[...seen].map(([n, d]) =>
+      `<button class="chip" data-um-name="${esc(n)}" title="${fmtDate(d)} · Klick zum Zuordnen">${esc(n)} <span class="muted">${fmtShort(d)}</span></button>`).join('')}</div>`;
+    box.querySelectorAll('[data-um-name]').forEach(b => b.onclick = () => assignAlt(b.dataset.umName));
+  }
+  function assignAlt(name) {
+    const active = players.filter(p => p.active !== false).sort((a, b) => a.name.localeCompare(b.name));
+    const body = h(`<div class="form-grid">
+      <div class="field full"><label>„${esc(name)}“ gehört zu</label>
+        <select class="select" data-pl><option value="">– Spieler wählen –</option>${active.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
+      <p class="hint full">Wird als Twink beim Spieler gespeichert und ab jetzt automatisch erkannt.</p>
+    </div>`);
+    openModal({ title: 'Twink zuordnen', body, actions: [{ label: 'Abbrechen' }, { label: 'Zuordnen', cls: 'btn-primary', onClick: async () => {
+      const pid = body.querySelector('[data-pl]').value;
+      if (!pid) { toast('Spieler wählen', 'err'); return true; }
+      const p = players.find(x => x.id === pid);
+      if (!playerFor([p], name)) await store.set('players', pid, { alts: [...(p.alts || []), name] });
+      toast(`${name} → ${p.name}`);
+      setTimeout(() => runAuto({ force: true }), 300);
+    } }] });
   }
 
   // ── Klicks (Event-Delegation) ─────────────────────────────
@@ -177,9 +234,15 @@ export function render(root, { mode }) {
         e.preventDefault();
         const { p, d } = cell.dataset;
         if (isRot) {
-          const cur = days[d]?.att?.[p] || '';
-          const next = back ? '' : ATT_CYCLE[(ATT_CYCLE.indexOf(cur) + 1) % ATT_CYCLE.length];
-          await store.setMapField('raidDays', d, 'att', p, next || null);
+          const day = days[d], manual = day?.att?.[p], auto = day?.auto?.[p] || '';
+          if (back) {   // Rechtsklick: erst zurück zur Automatik, dann ganz leeren
+            await store.setMapField('raidDays', d, 'att', p, manual ? null : auto ? '-' : null);
+            return;
+          }
+          const cur = effAtt(day, p);
+          const next = ATT_CYCLE[(ATT_CYCLE.indexOf(cur) + 1) % ATT_CYCLE.length];
+          // „leer“ bei vorhandenem Automatik-Wert merken, sonst springt der Automatik-Wert zurück
+          await store.setMapField('raidDays', d, 'att', p, next || (auto ? '-' : null));
         } else {
           const cur = Number(days[d]?.loot?.[p] || 0);
           const next = Math.max(0, cur + (back || minusMode ? -1 : 1));
@@ -195,9 +258,9 @@ export function render(root, { mode }) {
   }
 
   const unsubs = [
-    store.watchDoc('settings', 'main', s => { settings = s || {}; draw(); }),
-    store.watchCol('players', ps => { players = ps; draw(); }),
-    store.watchCol('raidDays', ds => { days = Object.fromEntries(ds.map(d => [d.id, d])); daysLoaded = true; draw(); },
+    store.watchDoc('settings', 'main', s => { settings = s || {}; draw(); maybeAuto(); }),
+    store.watchCol('players', ps => { players = ps; draw(); maybeAuto(); }),
+    store.watchCol('raidDays', ds => { days = Object.fromEntries(ds.map(d => [d.id, d])); daysLoaded = true; draw(); maybeAuto(); },
       err => { wrap.innerHTML = `<div class="empty" style="border:none">Keine Berechtigung (${esc(err.code || '')}).</div>`; }),
   ];
   return () => unsubs.forEach(u => u());

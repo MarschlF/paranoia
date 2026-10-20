@@ -4,6 +4,7 @@ import { CONFIG, DEMO_MODE } from '../config.js';
 import { esc, h, raidDates, todayIso, fmtShort, fmtDate, WD, parseIso, raidBosses, CLASSES, clsColor, clsName, specIcon } from '../ui.js';
 import { getWcl, mergeBoss } from '../wcl.js';
 import { progChartSvg, openProgCurve } from '../progcurve.js';
+import { classStripHtml, bindClassStrip } from '../classstrip.js';
 
 export function render(root) {
   const el = h(`
@@ -12,12 +13,12 @@ export function render(root) {
       <section class="hero container">
         <div class="hero-grid">
           <div>
-            <div class="eyebrow">Mythic Raiding · ${esc(CONFIG.guild.realm)}</div>
             <h1 class="hero-logo"><img src="assets/logo.webp" alt="Paranøia" width="720" height="634"></h1>
             <p class="hero-lead">Mythic-Raidgilde auf EU Todeswache · Raidtage ${esc(CONFIG.guild.raidDaysText)}</p>
             <div class="hero-actions">
               <a href="#/roster" class="btn btn-primary btn-lg">Roster ansehen</a>
               <a href="#/progress" class="btn btn-ghost btn-lg">Progress</a>
+              ${auth.isMember && !DEMO_MODE ? '' : '<a href="#/bewerben" class="btn btn-ghost btn-lg">Bewerben</a>'}
             </div>
           </div>
           <div class="card progress-card">
@@ -92,7 +93,7 @@ export function render(root) {
     if (box.dataset.boss === k.id) return;            // schon angezeigt
     box.dataset.boss = k.id;
     box.innerHTML = `<div class="kill-banner">
-      ${k.thumb ? `<div class="kb-img"><img src="${k.thumb}" alt=""></div>` : '<div class="kb-img kb-trophy">🏆</div>'}
+      <div class="kb-img kb-ava">${bossAvatar(k)}</div>
       <div class="kb-txt">
         <div class="kb-kind">Neuer Mythic-Kill</div>
         <div class="kb-name">${esc(k.name)}</div>
@@ -119,13 +120,20 @@ export function render(root) {
     }, { threshold: 0.6 });
     io.observe(banner);
   }
+  /** Boss-Avatar: Porträt von Warcraft Logs, sonst eigenes Titelbild, sonst Anfangsbuchstabe */
+  const bossAvatar = b => {
+    const wcl = b.encId ? `https://assets.rpglogs.com/img/warcraft/bosses/${Number(b.encId)}-icon.jpg` : '';
+    const first = wcl || b.thumb || '';
+    const next = wcl && b.thumb ? b.thumb : '';
+    return `<span class="hi-ava" data-init="${esc(String(b.name || '?').trim()[0] || '?')}">${first ? `<img src="${first}" alt="" ${next ? `data-next="${next}"` : ''} onerror="if(this.dataset.next){this.src=this.dataset.next;this.removeAttribute('data-next')}else{this.remove()}">` : ''}</span>`;
+  };
   /** Letzte Mythic-Kills (neueste zuerst) */
   function drawKills(bosses) {
     const box = $('[data-kills-list]');
     const kills = bosses.filter(b => b.status === 'kill' && b.killDate).sort((a, b) => b.killDate.localeCompare(a.killDate)).slice(0, 4);
     box.innerHTML = `<div class="hi-title">Letzte Kills</div>` + (kills.length ? `<div class="hi-kills">${kills.map(b => `
       <a class="hi-kill" href="#/progress/${encodeURIComponent(b.raidId || settings.currentRaid || '')}">
-        ${b.thumb ? `<span class="hi-thumb"><img src="${b.thumb}" alt=""></span>` : '<span class="hi-check">✓</span>'}
+        ${bossAvatar(b)}
         <span class="hi-kname">${esc(b.name)}</span>
         <span class="hi-kmeta">${fmtShort(b.killDate)}${b.pulls ? ` · ${b.pulls} Pulls` : ''}</span>
       </a>`).join('')}</div>` : '<p class="muted hi-empty">Noch kein Mythic-Kill in diesem Raid.</p>');
@@ -151,23 +159,11 @@ export function render(root) {
   function drawRoster(players) {
     const active = players.filter(p => p.active !== false);
     const n = r => active.filter(p => r.includes(p.rolle)).length;
-    // Pro Klasse: Icon der häufigsten Spec + Anzahl, Tooltip mit Aufteilung nach Spec
-    const byCls = Object.keys(CLASSES).map(k => {
-      const ps = active.filter(p => p.klasse === k);
-      const specs = {}; ps.forEach(p => { specs[p.spec] = (specs[p.spec] || 0) + 1; });
-      const top = Object.entries(specs).sort((a, b) => b[1] - a[1])[0]?.[0];
-      return { k, n: ps.length, icon: specIcon(k, top), specs };
-    }).filter(x => x.n).sort((a, b) => b.n - a.n || clsName(a.k).localeCompare(clsName(b.k)));
     $('[data-roster]').innerHTML = `<div class="hi-title">Roster</div>
       <div class="hi-big">${active.length} Raider</div>
       <div class="hi-sub">${n(['Tank'])} Tanks · ${n(['Healer'])} Heiler · ${n(['mDD', 'rDD'])} DPS</div>
-      <div class="hi-cls">${byCls.map(c => `<a class="hi-ci" href="#/roster" style="--cls:${clsColor(c.k)}" title="${esc(clsName(c.k))}: ${c.n} – ${esc(Object.entries(c.specs).map(([sp, m]) => `${sp} ${m}`).join(', '))}">
-        <img src="${classIconUrl(c.k)}" alt="${esc(clsName(c.k))}" data-fallback="${esc(c.icon || '')}">
-        <b>${c.n}</b></a>`).join('')}</div>`;
-    // Klassen-Icon nicht erreichbar (z. B. Vorschau) → Spec-Icon bzw. Kürzel
-    $('[data-roster]').querySelectorAll('img[data-fallback]').forEach(im => im.onerror = () => {
-      if (im.dataset.fallback) { im.src = im.dataset.fallback; im.dataset.fallback = ''; } else im.replaceWith(Object.assign(document.createElement('span'), { textContent: im.alt.slice(0, 2) }));
-    });
+      ${classStripHtml(active)}`;
+    bindClassStrip($('[data-roster]'));
   }
   /** Titelbild + Raidname aus dem aktuellen Raid */
   function drawHead() {
@@ -196,14 +192,22 @@ export function render(root) {
     const pct = b.bestPct !== '' && b.bestPct != null ? Number(b.bestPct) : null;
     const pulls = Number(b.totalPulls || b.pulls || 0);
     const started = b.status === 'prog' && (pct != null || pulls);
-    box.innerHTML = `
-      ${nowCover.id === b.id && nowCover.img ? `<div class="pc-now-cover"><img src="${nowCover.img}" alt=""><div class="pc-now-label">Aktuell am Boss</div></div>` : '<div class="pc-now-label">Aktuell am Boss</div>'}
+    const cover = nowCover.id === b.id && nowCover.img;
+    const info = `
       <div class="pc-now-row">
         <div class="pc-now-boss">${esc(b.name)}</div>
         ${pct != null ? `<div class="pc-now-pct">${pct.toLocaleString('de-AT', { maximumFractionDigits: 1 })} %</div>` : ''}
       </div>
-      ${pct != null ? `<div class="pc-hp"><span style="width:${Math.max(2, 100 - pct)}%"></span></div>` : ''}
-      <div class="pc-now-meta">${started ? `${pulls ? `${pulls} Pulls` : ''}${pct != null ? `${pulls ? ' · ' : ''}bester Pull ${pct.toLocaleString('de-AT', { maximumFractionDigits: 1 })} %` : ''}` : 'Noch nicht gepullt'}</div>
+      ${pct != null ? `<div class="pc-hp"><span style="width:${Math.max(2, 100 - pct)}%"></span></div>` : ''}`;
+    const fmtPct = v => v.toLocaleString('de-AT', { maximumFractionDigits: 1 });
+    const metaTxt = `${pulls ? `${pulls} Pulls` : ''}${pct != null ? `${pulls ? ' · ' : ''}bester Pull ${fmtPct(pct)} %` : ''}`;
+    // im Bild: Pulls + bester Pull als kleine Chips oben rechts
+    const meta = !started ? '<span>Noch nicht gepullt</span>'
+      : `${pulls ? `<span><b>${pulls}</b> Pulls</span>` : ''}${pct != null ? `<span>bester Pull <b>${fmtPct(pct)} %</b></span>` : ''}`;
+    // Mit Titelbild: Name, % und Lebensbalken liegen unten im Bild
+    box.innerHTML = `
+      ${cover ? `<div class="pc-now-cover"><img src="${nowCover.img}" alt=""><div class="pc-now-label">Aktuell am Boss</div>${meta ? `<div class="pc-now-chips">${meta}</div>` : ''}<div class="pc-now-over">${info}</div></div>`
+        : `<div class="pc-now-label">Aktuell am Boss</div>${info}<div class="pc-now-meta">${started ? metaTxt : 'Noch nicht gepullt'}</div>`}
       ${b.nights?.length > 1 ? `<button class="pc-spark" data-spark title="Prog-Kurve öffnen">${progChartSvg(b.nights, { mini: true })}<span>📈 Prog-Kurve · ${b.nights.length} Abende</span></button>` : ''}`;
     box.querySelector('[data-spark]')?.addEventListener('click', () => openProgCurve(b));
   }
@@ -250,8 +254,3 @@ function confetti(anchor) {
     if (age < 2300) requestAnimationFrame(frame); else c.remove();
   })(start);
 }
-
-/** Offizielles Klassen-Icon (Wowhead-CDN, wie die Item-Icons) */
-const CLASS_ICON = { DK: 'deathknight', DH: 'demonhunter', Druid: 'druid', Evoker: 'evoker', Hunter: 'hunter', Mage: 'mage', Monk: 'monk',
-  Paladin: 'paladin', Priest: 'priest', Rogue: 'rogue', Shaman: 'shaman', Warlock: 'warlock', Warrior: 'warrior' };
-function classIconUrl(k) { return `https://wow.zamimg.com/images/wow/icons/large/classicon_${CLASS_ICON[k] || String(k).toLowerCase()}.jpg`; }

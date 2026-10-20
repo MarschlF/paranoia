@@ -201,7 +201,7 @@ export function matchPlayer(players, name) {
 
 // ── Item-Symbole & Wowhead-Tooltips ─────────────────────────
 const ZAM = 'https://wow.zamimg.com/images/wow/icons';
-export const iconUrl = (icon, size = 'medium') => `${ZAM}/${size}/${String(icon || 'inv_misc_questionmark').toLowerCase().replace(/[^a-z0-9_-]/g, '')}.jpg`;
+export const iconUrl = (icon, size = 'medium') => `${ZAM}/${size}/${(String(icon || '').toLowerCase().replace(/\.(jpg|jpeg|png|blp)$/, '').replace(/[^a-z0-9_-]/g, '') || 'inv_misc_questionmark')}.jpg`;   // WCL liefert z. B. "inv_helm_01.jpg"
 const QUALITY = { 0: '#9d9d9d', 1: '#ffffff', 2: '#1eff00', 3: '#0070dd', 4: '#a335ee', 5: '#ff8000', 6: '#e6cc80' };
 /** Item-Symbol mit Wowhead-Tooltip. it = { id, ilvl, icon, q, bonus[], gemIds[], ench } */
 export function itemIcon(it, size = 36) {

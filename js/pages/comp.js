@@ -5,6 +5,7 @@
 import { store, auth } from '../store.js';
 import { CONFIG, DEMO_MODE } from '../config.js';
 import { CLASSES, ROLES, STATUSES, clsColor, esc, h, specImg, specIcon, toast, openModal, raidDates, todayIso, fmtShort, parseIso, WD } from '../ui.js';
+import { coverOk } from '../raids.js';
 import { guessRole } from '../players.js';
 
 const ss = { get: k => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} } };
@@ -332,8 +333,12 @@ export function render(root) {
   async function exportImage() {
     const l = layout();
     const title = settings.raidName || 'Raid-Setup';
+    const nd0 = raidDates(settings).find(d => d >= todayIso());
+    const raid = await currentRaid(settings);
     const blob = await renderCompImage({
-      title,
+      title: raid?.name || title, cover: coverOk(raid?.cover) ? raid.cover : '', season: raid?.season || '',
+      date: nd0 ? `${WD[parseIso(nd0).getDay()]} ${fmtShort(nd0)}${settings.raidStart ? ` · ${settings.raidStart}` : ''}` : '',
+      diff: DIFFS[diff].label,
       sub: `${DIFFS[diff].label} · ${inRaid(l).length}/${DIFFS[diff].groups * GROUP_SIZE}`,
       groups: groupKeys().map(k => l[k].map(eff).filter(Boolean)),
       bench: l.bench.map(eff).filter(Boolean),
@@ -397,19 +402,28 @@ export function render(root) {
 }
 
 // ── Canvas-Rendering für das Discord-Bild ───────────────────
-const loadImg = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+const loadImg = src => new Promise(res => { if (!src) return res(null); const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
 const fit = (ctx, t, max) => { if (ctx.measureText(t).width <= max) return t; while (t.length && ctx.measureText(t + '…').width > max) t = t.slice(0, -1); return t + '…'; };
+const once = (fn) => new Promise(res => { let un = null, done = false; const fin = v => { if (done) return; done = true; res(v); setTimeout(() => un?.(), 0); }; un = fn(fin, () => fin(null)); setTimeout(() => fin(null), 4000); });
 
-async function renderCompImage({ title, sub, groups, bench, note }) {
+/** Aktueller Raid (Name, Season, Titelbild aus Boss Guides / Progress) */
+async function currentRaid(settings) {
+  if (!settings.currentRaid) return null;
+  return await once((ok, err) => store.watchDoc('raids', settings.currentRaid, ok, err));
+}
+
+const hexA = (hex, a) => { const n = parseInt(String(hex).replace('#', ''), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
+
+async function renderCompImage({ title, sub, groups, bench, note, cover, season, date, diff }) {
   try { await document.fonts.ready; } catch {}
-  const W = 1200, PAD = 36, GAP = 16, ROW = 44, TOP = 120;
+  const W = 1200, PAD = 36, GAP = 16, ROW = 46, HEAD = 200, TOP = HEAD + 26;
   const cols = Math.min(groups.length, 4);
   const gRows = Math.ceil(groups.length / cols);
   const colW = (W - PAD * 2 - GAP * (cols - 1)) / cols;
-  const groupH = 46 + 5 * ROW + 6;
+  const groupH = 50 + 5 * ROW + 6;
   const benchCols = 4, benchRows = Math.ceil(bench.length / benchCols);
-  const benchH = bench.length ? 46 + benchRows * ROW + 6 : 0;
-  const H = TOP + gRows * (groupH + GAP) + (bench.length ? benchH + GAP : 0) + (note ? 40 : 0) + PAD - GAP;
+  const benchH = bench.length ? 50 + benchRows * ROW + 6 : 0;
+  const H = TOP + gRows * (groupH + GAP) + (bench.length ? benchH + GAP : 0) + (note ? 44 : 0) + 44;
 
   const c = document.createElement('canvas');
   const scale = 2; c.width = W * scale; c.height = H * scale;
@@ -417,65 +431,113 @@ async function renderCompImage({ title, sub, groups, bench, note }) {
   const F = (w, s) => `${w} ${s}px Inter, system-ui, sans-serif`;
   const D = (w, s) => `${w} ${s}px "Space Grotesk", Inter, system-ui, sans-serif`;
   const rr = (X, Y, w, hh, r) => { x.beginPath(); x.roundRect(X, Y, w, hh, r); };
+  const ACC = '#b07cff', ACC2 = '#e26bff';
+
+  const [logo, bg] = await Promise.all([loadImg('assets/logo-nav.webp'), loadImg(cover)]);
 
   // Hintergrund
-  x.fillStyle = '#07090d'; x.fillRect(0, 0, W, H);
-  const glow = x.createRadialGradient(W * .85, -40, 10, W * .85, -40, 620);
-  glow.addColorStop(0, 'rgba(140,80,255,.20)'); glow.addColorStop(1, 'rgba(140,80,255,0)');
-  x.fillStyle = glow; x.fillRect(0, 0, W, H);
+  x.fillStyle = '#07080d'; x.fillRect(0, 0, W, H);
+  let g = x.createRadialGradient(W * .15, H, 10, W * .15, H, 700); g.addColorStop(0, 'rgba(176,124,255,.14)'); g.addColorStop(1, 'rgba(176,124,255,0)'); x.fillStyle = g; x.fillRect(0, 0, W, H);
+  g = x.createRadialGradient(W * .95, H * .5, 10, W * .95, H * .5, 600); g.addColorStop(0, 'rgba(226,107,255,.08)'); g.addColorStop(1, 'rgba(226,107,255,0)'); x.fillStyle = g; x.fillRect(0, 0, W, H);
 
-  // Kopf mit Logo
-  const logo = await loadImg('assets/logo-nav.webp');
+  // Kopf: Boss-Titelbild oder Lila-Verlauf
+  x.save(); rr(0, 0, W, HEAD, 0); x.clip();
+  if (bg) {
+    const sc = Math.max(W / bg.width, HEAD / bg.height), bw = bg.width * sc, bh = bg.height * sc;
+    x.drawImage(bg, (W - bw) / 2, (HEAD - bh) * 0.18, bw, bh);
+    g = x.createLinearGradient(0, 0, W, 0); g.addColorStop(0, 'rgba(7,8,13,.96)'); g.addColorStop(.45, 'rgba(7,8,13,.7)'); g.addColorStop(1, 'rgba(7,8,13,.15)'); x.fillStyle = g; x.fillRect(0, 0, W, HEAD);
+  } else {
+    g = x.createLinearGradient(0, 0, W, HEAD); g.addColorStop(0, '#120b22'); g.addColorStop(1, '#2a1150'); x.fillStyle = g; x.fillRect(0, 0, W, HEAD);
+    g = x.createRadialGradient(W * .8, HEAD * .3, 10, W * .8, HEAD * .3, 420); g.addColorStop(0, 'rgba(226,107,255,.35)'); g.addColorStop(1, 'rgba(226,107,255,0)'); x.fillStyle = g; x.fillRect(0, 0, W, HEAD);
+    if (logo) { x.globalAlpha = .12; const lh = 260, lw = logo.width / logo.height * lh; x.drawImage(logo, W - lw + 30, -30, lw, lh); x.globalAlpha = 1; }
+  }
+  g = x.createLinearGradient(0, HEAD - 70, 0, HEAD); g.addColorStop(0, 'rgba(7,8,13,0)'); g.addColorStop(1, '#07080d'); x.fillStyle = g; x.fillRect(0, HEAD - 70, W, 70);
+  x.restore();
+  // Leuchtlinie unter dem Kopf
+  g = x.createLinearGradient(PAD, 0, W - PAD, 0); g.addColorStop(0, hexA(ACC, 0)); g.addColorStop(.3, ACC); g.addColorStop(.7, ACC2); g.addColorStop(1, hexA(ACC2, 0));
+  x.fillStyle = g; x.fillRect(PAD, HEAD - 1, W - PAD * 2, 2);
+  x.save(); x.shadowColor = ACC; x.shadowBlur = 18; x.fillRect(PAD + 200, HEAD - 1, W - PAD * 2 - 400, 2); x.restore();
+
+  // Logo + Titel
   let tx = PAD;
-  if (logo) { const lh = 70, lw = logo.width / logo.height * lh; x.drawImage(logo, PAD - 4, 22, lw, lh); tx = PAD + lw + 12; }
-  x.fillStyle = '#e6ebf2'; x.font = D('700', 34); x.fillText(fit(x, title, W - tx - 300), tx, 62);
-  x.fillStyle = '#a3adbd'; x.font = F('500', 16); x.fillText(sub, tx, 88);
-  x.fillStyle = '#6b7587'; x.font = F('600', 13); x.textAlign = 'right'; x.fillText('PARANØIA · EU TODESWACHE', W - PAD, 62); x.textAlign = 'left';
+  if (logo) { const lh = 74, lw = logo.width / logo.height * lh; x.save(); x.shadowColor = 'rgba(176,124,255,.6)'; x.shadowBlur = 20; x.drawImage(logo, PAD - 4, 40, lw, lh); x.restore(); tx = PAD + lw + 16; }
+  x.fillStyle = ACC; x.font = F('800', 13); x.fillText(`AUFSTELLUNG · ${String(diff || '').toUpperCase()}`, tx, 56);
+  x.fillStyle = '#ffffff'; x.font = D('700', 42); x.save(); x.shadowColor = 'rgba(0,0,0,.6)'; x.shadowBlur = 12; x.fillText(fit(x, title, W - tx - 340), tx, 100); x.restore();
+  x.fillStyle = '#c7cede'; x.font = F('500', 16); x.fillText([season, date].filter(Boolean).join('  ·  ') || sub, tx, 128);
+
+  // Rollen-Zähler rechts
+  const all = groups.flat();
+  const cnt = { Tank: 0, Healer: 0, DPS: 0 };
+  all.forEach(p => { if (p.rolle === 'Tank') cnt.Tank++; else if (p.rolle === 'Healer') cnt.Healer++; else cnt.DPS++; });
+  const chips = [['TANKS', cnt.Tank, '#5aa9ff'], ['HEILER', cnt.Healer, '#5dff9d'], ['DPS', cnt.DPS, '#ff6b6b']];
+  let cx = W - PAD;
+  for (const [lab, n, col] of chips.reverse()) {
+    const cw = 92; cx -= cw;
+    rr(cx, 52, cw - 10, 70, 12); x.fillStyle = 'rgba(10,10,18,.72)'; x.fill(); x.strokeStyle = hexA(col, .55); x.lineWidth = 1.2; x.stroke();
+    x.textAlign = 'center'; x.fillStyle = col; x.font = D('700', 30); x.fillText(String(n), cx + (cw - 10) / 2, 94);
+    x.fillStyle = '#aab3c5'; x.font = F('700', 10.5); x.fillText(lab, cx + (cw - 10) / 2, 112); x.textAlign = 'left';
+  }
+  x.fillStyle = '#e6ebf2'; x.font = F('700', 13); x.textAlign = 'right'; x.fillText(`${all.length} SPIELER`, W - PAD - 10, 146); x.textAlign = 'left';
 
   // Spec-Icons laden
-  const all = [...groups.flat(), ...bench];
+  const everyone = [...all, ...bench];
   const icons = Object.fromEntries(await Promise.all(
-    [...new Set(all.map(p => specIcon(p.klasse, p.spec)).filter(Boolean))].map(async s => [s, await loadImg(s)])));
+    [...new Set(everyone.map(p => specIcon(p.klasse, p.spec)).filter(Boolean))].map(async s => [s, await loadImg(s)])));
 
   const drawPlayer = (p, X, Y, w) => {
-    const ic = icons[specIcon(p.klasse, p.spec)];
-    rr(X, Y, w, ROW - 6, 7); x.fillStyle = '#161c27'; x.fill();
-    if (ic) { x.save(); rr(X + 6, Y + 5, 28, 28, 5); x.clip(); x.drawImage(ic, X + 6, Y + 5, 28, 28); x.restore(); }
-    x.strokeStyle = clsColor(p.klasse); x.lineWidth = 1.5; rr(X + 6, Y + 5, 28, 28, 5); x.stroke();
-    x.fillStyle = clsColor(p.klasse); x.font = F('700', 16);
-    const nm = fit(x, p.name, w - (p.offspec ? 110 : 56)); x.fillText(nm, X + 44, Y + 25);
+    const col = clsColor(p.klasse), ic = icons[specIcon(p.klasse, p.spec)], hh = ROW - 6;
+    x.save(); rr(X, Y, w, hh, 8); x.clip();
+    x.fillStyle = '#121624'; x.fillRect(X, Y, w, hh);
+    const gg = x.createLinearGradient(X, 0, X + w, 0); gg.addColorStop(0, hexA(col, .34)); gg.addColorStop(.55, hexA(col, .08)); gg.addColorStop(1, hexA(col, 0));
+    x.fillStyle = gg; x.fillRect(X, Y, w, hh);
+    x.fillStyle = col; x.fillRect(X, Y, 3, hh);
+    x.restore();
+    if (ic) { x.save(); rr(X + 9, Y + 5, 30, 30, 6); x.clip(); x.drawImage(ic, X + 9, Y + 5, 30, 30); x.restore(); }
+    x.strokeStyle = 'rgba(0,0,0,.6)'; x.lineWidth = 1; rr(X + 9, Y + 5, 30, 30, 6); x.stroke();
+    x.fillStyle = col; x.font = F('700', 16);
+    const nm = fit(x, p.name, w - (p.offspec ? 112 : 58)); x.save(); x.shadowColor = hexA(col, .45); x.shadowBlur = 8; x.fillText(nm, X + 48, Y + 26); x.restore();
     if (p.offspec) {
       const tag = p.rolle === 'Healer' ? 'HEAL' : p.rolle.toUpperCase();
-      const nx = X + 44 + x.measureText(nm).width + 8;
+      const nx = X + 48 + x.measureText(nm).width + 8;
       x.font = F('700', 10.5); const tw = x.measureText(tag).width + 10;
-      rr(nx, Y + 11, tw, 17, 4); x.fillStyle = 'rgba(245,196,81,.15)'; x.fill();
-      x.fillStyle = '#f5c451'; x.fillText(tag, nx + 5, Y + 23.5);
+      rr(nx, Y + 12, tw, 17, 4); x.fillStyle = 'rgba(245,196,81,.18)'; x.fill();
+      x.fillStyle = '#f5c451'; x.fillText(tag, nx + 5, Y + 24.5);
     }
+  };
+  const panel = (X, Y, w, hh, label, right, accent) => {
+    rr(X, Y, w, hh, 14); x.fillStyle = 'rgba(17,19,31,.92)'; x.fill(); x.strokeStyle = 'rgba(176,124,255,.22)'; x.lineWidth = 1; x.stroke();
+    x.save(); rr(X, Y, w, hh, 14); x.clip();
+    const gg = x.createLinearGradient(X, 0, X + w, 0); gg.addColorStop(0, accent[0]); gg.addColorStop(1, accent[1]); x.fillStyle = gg; x.fillRect(X, Y, w, 3);
+    const gl = x.createLinearGradient(0, Y, 0, Y + 46); gl.addColorStop(0, hexA(accent[0].startsWith('#') ? accent[0] : ACC, .12)); gl.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = gl; x.fillRect(X, Y, w, 46);
+    x.restore();
+    x.fillStyle = accent[0]; x.font = F('800', 13); x.fillText(label, X + 16, Y + 31);
+    if (right) { x.fillStyle = '#8b93a7'; x.font = F('700', 12.5); x.textAlign = 'right'; x.fillText(right, X + w - 16, Y + 31); x.textAlign = 'left'; }
   };
 
   // Gruppen
   groups.forEach((grp, i) => {
     const X = PAD + (i % cols) * (colW + GAP), Y = TOP + Math.floor(i / cols) * (groupH + GAP);
-    rr(X, Y, colW, groupH, 12); x.fillStyle = '#11161f'; x.fill(); x.strokeStyle = '#222a38'; x.lineWidth = 1; x.stroke();
-    x.fillStyle = '#a3adbd'; x.font = F('700', 13); x.fillText(`GRUPPE ${i + 1}`, X + 14, Y + 28);
-    x.fillStyle = '#6b7587'; x.textAlign = 'right'; x.fillText(`${grp.length}/5`, X + colW - 14, Y + 28); x.textAlign = 'left';
+    panel(X, Y, colW, groupH, `GRUPPE ${i + 1}`, `${grp.length}/5`, [ACC, ACC2]);
     for (let r = 0; r < 5; r++) {
-      const py = Y + 42 + r * ROW;
-      if (grp[r]) drawPlayer(grp[r], X + 8, py, colW - 16);
-      else { x.setLineDash([4, 4]); rr(X + 8, py, colW - 16, ROW - 6, 7); x.strokeStyle = '#2c3546'; x.lineWidth = 1; x.stroke(); x.setLineDash([]); }
+      const py = Y + 46 + r * ROW;
+      if (grp[r]) drawPlayer(grp[r], X + 9, py, colW - 18);
+      else { x.setLineDash([4, 4]); rr(X + 9, py, colW - 18, ROW - 6, 8); x.strokeStyle = '#2a2f44'; x.lineWidth = 1; x.stroke(); x.setLineDash([]); }
     }
   });
 
   // Ersatzbank
   let y = TOP + gRows * (groupH + GAP);
   if (bench.length) {
-    rr(PAD, y, W - PAD * 2, benchH, 12); x.fillStyle = '#11161f'; x.fill(); x.strokeStyle = '#222a38'; x.lineWidth = 1; x.stroke();
-    x.fillStyle = '#f5c451'; x.font = F('700', 13); x.fillText(`ERSATZBANK (${bench.length})`, PAD + 14, y + 28);
-    const bw = (W - PAD * 2 - 16 - GAP * (benchCols - 1)) / benchCols;
-    bench.forEach((p, i) => drawPlayer(p, PAD + 8 + (i % benchCols) * (bw + GAP), y + 42 + Math.floor(i / benchCols) * ROW, bw));
+    panel(PAD, y, W - PAD * 2, benchH, `ERSATZBANK`, String(bench.length), ['#f5c451', '#ff9a3c']);
+    const bw = (W - PAD * 2 - 18 - GAP * (benchCols - 1)) / benchCols;
+    bench.forEach((p, i) => drawPlayer(p, PAD + 9 + (i % benchCols) * (bw + GAP), y + 46 + Math.floor(i / benchCols) * ROW, bw));
     y += benchH + GAP;
   }
-  if (note) { x.fillStyle = '#a3adbd'; x.font = F('italic 500', 15); x.fillText(fit(x, note, W - PAD * 2), PAD, y + 20); }
+  if (note) { x.fillStyle = '#c7cede'; x.font = F('italic 500', 15); x.fillStyle = ACC; x.fillRect(PAD, y + 4, 3, 22); x.fillStyle = '#c7cede'; x.fillText(fit(x, note, W - PAD * 2 - 14), PAD + 14, y + 20); y += 44; }
+
+  // Fußzeile
+  x.fillStyle = '#5d6478'; x.font = F('700', 11.5); x.fillText('PARANØIA · MYTHIC-RAIDGILDE · EU TODESWACHE', PAD, H - 18);
+  x.textAlign = 'right'; x.fillText(new Date().toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' }), W - PAD, H - 18); x.textAlign = 'left';
 
   return new Promise(res => c.toBlob(res, 'image/png'));
 }

@@ -6,6 +6,7 @@ rules_version = '2';
 //  Nur Offiziere:      raidDays, vods, comps        (Comp, Rotation, Loot, Logs, VoDs) – lesen UND schreiben
 //  Guide gelesen:      guideReads – jeder nur sein eigenes Dokument, Offis alle
 //  Umfragen:           polls lesen alle Raider; pollAnswers jeder nur die eigene, Offis alle
+//  Bewerbungen:        applications – jeder darf anlegen (ohne Login), lesen/bearbeiten nur Offis
 //  Schreiben:          nur Offiziere
 //  "member" / "officer" kommen aus dem Discord-Login (Cloudflare Worker)
 // ─────────────────────────────────────────────────────────────
@@ -42,6 +43,25 @@ service cloud.firestore {
       allow write: if isOfficer() || (isMember() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['name', 'reads', 'playerId'])
         && request.resource.data.get('playerId', null) == (resource == null ? null : resource.data.get('playerId', null)));
+    }
+
+    // Bewerbungen: jeder darf EINE neue anlegen (ohne Login, Felder + Längen geprüft), lesen/bearbeiten nur Offis
+    match /applications/{id} {
+      allow read, update, delete: if isOfficer();
+      allow create: if request.resource.data.keys().hasOnly(['char', 'realm', 'klasse', 'spec', 'offspec', 'discord', 'exp', 'why', 'logs', 'allDays', 'avail', 'other', 'consent', 'status', 'at'])
+        && request.resource.data.status == 'neu' && request.resource.data.consent == true
+        && request.resource.data.char is string && request.resource.data.char.size() >= 2 && request.resource.data.char.size() <= 24
+        && request.resource.data.realm is string && request.resource.data.realm.size() >= 2 && request.resource.data.realm.size() <= 40
+        && request.resource.data.klasse is string && request.resource.data.klasse.size() <= 12
+        && request.resource.data.spec is string && request.resource.data.spec.size() <= 20
+        && request.resource.data.discord is string && request.resource.data.discord.size() >= 2 && request.resource.data.discord.size() <= 40
+        && request.resource.data.exp is string && request.resource.data.exp.size() <= 2000
+        && request.resource.data.why is string && request.resource.data.why.size() <= 2000
+        && request.resource.data.get('offspec', '').size() <= 60
+        && request.resource.data.get('logs', '').size() <= 300
+        && request.resource.data.get('avail', '').size() <= 300
+        && request.resource.data.get('other', '').size() <= 1500
+        && request.resource.data.at is string && request.resource.data.at.size() <= 30;
     }
 
     // Umfragen: alle Raider lesen, nur Offis anlegen/ändern

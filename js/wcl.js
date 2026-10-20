@@ -34,6 +34,7 @@ export function mergeBoss(b, wcl) {
   return {
     ...b,
     source: 'wcl',
+    encId: e.id,
     status: e.kill ? 'kill' : 'prog',
     killDate: e.firstKill || '',
     pulls: e.kill ? e.pullsToKill : e.pulls,

@@ -3,7 +3,7 @@
 //  + Defensive-Check: Defensives, Healthstones, Tränke und Tode pro Spieler
 // ─────────────────────────────────────────────────────────────
 import { store, auth } from '../store.js';
-import { esc, h, raidDates, todayIso, fmtDate, fmtShort, parseIso, WD, toast, openModal, clsColor, specImg, matchPlayer } from '../ui.js';
+import { esc, h, raidDates, todayIso, fmtDate, fmtShort, parseIso, WD, toast, openModal, clsColor, specImg, matchPlayer, MONTHS } from '../ui.js';
 import { getWcl } from '../wcl.js';
 import { CHECK_GROUPS, groupsFrom, getCheck, aggregate, setDemoPlayers } from '../checks.js';
 import { DEMO_MODE } from '../config.js';
@@ -53,6 +53,7 @@ export function render(root) {
   root.appendChild(el);
   const $ = s => el.querySelector(s);
 
+  let openMonths = null;   // aufgeklappte Monate (YYYY-MM)
   let settings = null, days = {}, wcl, onlyLogs = false, wclFor = null, vodsByDate = {}, players = [], checksDoc = null;
   let view = officer ? (ss.get('pn-logs-view') || 'nights') : 'nights';
   let range = ss.get('pn-check-range') || '4', diff = ss.get('pn-check-diff') || 'Mythic', onlyRoster = true;
@@ -96,11 +97,28 @@ export function render(root) {
 
     if (!dates.length) { wrap.innerHTML = '<div class="empty" style="border:none"><div class="big">📈</div>Noch keine vergangenen Raidabende.</div>'; return; }
 
+    // Nach Monat gruppieren: aktueller Monat offen (bei < 3 Abenden auch der Vormonat), Rest eingeklappt
+    const months = [];
+    for (const d of dates) { const k = d.slice(0, 7); if (months.at(-1)?.k !== k) months.push({ k, dates: [] }); months.at(-1).dates.push(d); }
+    if (!openMonths) {
+      openMonths = new Set([months[0].k]);
+      if (months[0].dates.length < 3 && months[1]) openMonths.add(months[1].k);
+    }
+    const cols = officer ? 5 : 4;
+    const monthHead = m => {
+      const withLogs = m.dates.filter(d => byDate[d]).length;
+      let pulls = 0, kills = 0;
+      m.dates.forEach(d => { const reps = byDate[d] || []; const dif = reps.map(r => r.difficulty).sort((a, b) => rank(b) - rank(a))[0] || ''; const p = sumPulls(reps, dif); if (p) { pulls += p.pulls || 0; kills += p.kills || 0; } });
+      const open = openMonths.has(m.k);
+      return `<tr class="month-row ${open ? 'open' : ''}" data-month="${m.k}"><td colspan="${cols}">
+        <span class="mr-chev">▸</span><b>${MONTHS[Number(m.k.slice(5)) - 1]} ${m.k.slice(0, 4)}</b>
+        <span class="mr-meta">${m.dates.length} Abend${m.dates.length > 1 ? 'e' : ''} · ${withLogs} mit Logs${pulls ? ` · ${pulls} Pulls` : ''}${kills ? ` · <span class="k">${kills} Kill${kills > 1 ? 's' : ''}</span>` : ''}</span></td></tr>`;
+    };
     wrap.innerHTML = `
       <table class="logs-table">
         <thead><tr><th>Datum</th><th>Schwierigkeit</th><th>Pulls</th><th>${officer ? 'Logs & Analyse' : 'Logs'}</th>${officer ? '<th style="width:40%">Notiz</th>' : ''}</tr></thead>
         <tbody>
-          ${dates.map(d => {
+          ${months.map(m => monthHead(m) + (!openMonths.has(m.k) ? '' : m.dates.map(d => {
             const reps = byDate[d] || [];
             const dif = reps.map(r => r.difficulty).sort((a, b) => rank(b) - rank(a))[0] || '';
             const pulls = sumPulls(reps, dif);
@@ -115,9 +133,12 @@ export function render(root) {
                 : 'Kein Log hochgeladen'}${officer && pulls?.pulls && (dif === 'Mythic' || dif === 'Heroic') ? `<button class="log-btn dc-btn" data-night="${d}" title="Defensives, Healthstones, Tränke und Tode an diesem Abend">🛡 Check</button>` : ''}${(officer ? vodsByDate[d] || [] : []).map(v => `<a class="log-btn vod" href="#/vods/${encodeURIComponent(v.id)}" title="${esc(v.title || '')}">▶ VoD${v.pov ? ` ${esc(v.pov)}` : ''}</a>`).join('')}</div></td>
               ${officer ? `<td><input class="note-input" data-note="${d}" value="${esc(days[d]?.note || '')}" placeholder="Notiz hinzufügen…"></td>` : ''}
             </tr>`;
-          }).join('')}
+          }).join(''))).join('')}
         </tbody>
       </table>`;
+    wrap.querySelectorAll('[data-month]').forEach(tr => tr.onclick = () => {
+      const k = tr.dataset.month; openMonths.has(k) ? openMonths.delete(k) : openMonths.add(k); draw();
+    });
 
     wrap.querySelectorAll('[data-note]').forEach(inp => inp.addEventListener('change', async () => {
       await store.set('raidDays', inp.dataset.note, { note: inp.value.trim() });

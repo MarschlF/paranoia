@@ -22,17 +22,30 @@ export function sortRaids(raids, settings) {
 
 /** Aktuellen Raid setzen – Name und Season landen auch in den Einstellungen */
 export async function setCurrentRaid(raid) {
-  await store.set('settings', 'main', { currentRaid: raid.id, raidName: raid.name, season: raid.season || '' });
+  const data = { currentRaid: raid.id, raidName: raid.name, season: raid.season || '' };
+  // Zeitraum des Raids = Season → Rotation, Loot und Logs stellen sich automatisch um
+  if (raid.startDate) data.startDate = raid.startDate;
+  if (raid.endDate) data.endDate = raid.endDate;
+  await store.set('settings', 'main', data);
+}
+/** Einmalig: aktueller Raid ohne eigenen Zeitraum bekommt den aus den Raid-Einstellungen */
+export function adoptSeasonDates(raids, settings) {
+  const r = raids.find(x => x.id === settings.currentRaid);
+  if (r && !r.startDate && settings.startDate) store.set('raids', r.id, { startDate: settings.startDate, endDate: settings.endDate || '' }).catch(() => {});
 }
 
 export function editRaid(raid, { raids = [], bosses = [], settings = {} } = {}) {
   const r = raid || { name: '', season: '', order: Math.max(0, ...raids.map(x => x.order || 0)) + 1 };
   const isCurrent = raid && settings.currentRaid === raid.id;
+  const sd = r.startDate || (isCurrent ? settings.startDate : '') || '', ed = r.endDate || (isCurrent ? settings.endDate : '') || '';
   const form = h(`
     <div class="form-grid">
       <div class="field full"><label>Raidname</label><input class="input" name="name" value="${esc(r.name)}" placeholder="z. B. The Venomous Abyss"></div>
       <div class="field"><label>Season</label><input class="input" name="season" value="${esc(r.season || '')}" placeholder="z. B. Season 3"></div>
       <div class="field"><label>Sortierung</label><input class="input" type="number" name="order" value="${esc(r.order ?? '')}"></div>
+      <div class="field"><label>Season-Start</label><input class="input" type="date" name="startDate" value="${esc(sd)}"></div>
+      <div class="field"><label>Season-Ende</label><input class="input" type="date" name="endDate" value="${esc(ed)}"></div>
+      <span class="hint full" style="grid-column:1/-1;margin-top:-6px">Ist der Raid der aktuelle, laufen Rotation, Loot und Logs automatisch in diesem Zeitraum.</span>
       <div class="field full"><label>Titelbild</label>
         <div class="cover-edit">
           <div class="cover-preview" data-preview>${coverOk(r.cover) ? `<img src="${r.cover}" alt="">` : '<span>Kein Titelbild</span>'}</div>
@@ -64,7 +77,9 @@ export function editRaid(raid, { raids = [], bosses = [], settings = {} } = {}) 
   actions.push({ label: 'Speichern', cls: 'btn-primary', onClick: async () => {
     const v = n => form.querySelector(`[name=${n}]`).value.trim();
     if (!v('name')) { toast('Name fehlt', 'err'); return true; }
-    const data = { name: v('name'), season: v('season'), order: Number(v('order')) || 0, cover };
+    const data = { name: v('name'), season: v('season'), order: Number(v('order')) || 0, cover, startDate: v('startDate'), endDate: v('endDate') };
+    if (data.startDate && data.endDate && data.endDate < data.startDate) { toast('Season-Ende liegt vor dem Start', 'err'); return true; }
+    if (form.querySelector('[name=current]').checked && !data.startDate) { toast('Für den aktuellen Raid bitte Season-Start eintragen', 'err'); return true; }
     let id = raid?.id;
     if (raid) await store.set('raids', id, data);
     else {
