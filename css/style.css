@@ -2236,3 +2236,14 @@ button.hi-ci { padding: 0; border: 0; cursor: pointer; }
 .gr-mods .chip:disabled { opacity: .35; cursor: not-allowed; }
 .tracker.grades { table-layout: fixed; }
 .tracker.grades th.gr-off, .tracker.grades .gr-avg { width: auto; }
+.tracker.grades td.gr-pn { cursor: pointer; }
+.tracker.grades td.gr-pn:hover .nm { text-decoration: underline; }
+.gr-nc { font-size: 11px; color: var(--gold); margin-left: 4px; white-space: nowrap; }
+.gr-notes { display: grid; gap: 10px; }
+.gr-note-sec { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-3); margin-top: 8px; }
+.gr-note { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--surface-2); }
+.gr-note.me { border-color: var(--accent-dim); }
+.gr-note-h { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; font-size: 13px; }
+.gr-note-h .muted { margin-left: auto; font-size: 12px; }
+.gr-note-n { font-weight: 700; }
+.gr-note p { white-space: pre-wrap; font-size: 13.5px; line-height: 1.5; }

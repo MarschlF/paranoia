@@ -99,8 +99,9 @@ export function render(root) {
       const name = form.querySelector('[name=name]').value.trim();
       if (!name) { toast('Bitte einen Namen eingeben', 'err'); return true; }
       const id = `${Date.now().toString(36)}`;
+      rid = id; ls.set(LS_ROUND, id);   // vorher setzen – der Index-Listener feuert sofort
       await store.setMapField(COL, INDEX, 'rounds', id, { name, season, created: new Date().toISOString() });
-      rid = id; ls.set(LS_ROUND, id); toast('Runde angelegt');
+      toast('Runde angelegt');
     } }] });
   };
 
@@ -112,9 +113,10 @@ export function render(root) {
     openModal({ title: 'Runde bearbeiten', body: form, actions: [
       { label: 'Runde löschen', cls: 'btn-danger', onClick: async () => {
         if (!await confirmModal('Runde löschen?', `„${r.name}“ und alle Noten darin werden endgültig gelöscht.`)) return true;
-        await store.remove(COL, 'grades__' + r.id);
+        rid = '';
         await store.setMapField(COL, INDEX, 'rounds', r.id, null);
-        rid = ''; toast('Runde gelöscht');
+        await store.remove(COL, 'grades__' + r.id);
+        toast('Runde gelöscht');
       } },
       { label: 'Abbrechen' },
       { label: 'Speichern', cls: 'btn-primary', onClick: async () => {
@@ -133,6 +135,7 @@ export function render(root) {
       .sort((a, b) => (b.me - a.me) || a.name.localeCompare(b.name, 'de'));
   }
   const cell = (pid, uid) => round?.g?.[`${pid}__${uid}`] || null;
+  const notes = pid => Object.entries(round?.g || {}).filter(([k, v]) => k.startsWith(pid + '__') && v?.c).length;
 
   function draw() {
     $('[data-season]').textContent = settings.season || 'Season';
@@ -154,7 +157,7 @@ export function render(root) {
     const rowHtml = p => {
       const a = pAvg(p);
       return `<tr style="--cls:${clsColor(p.klasse)}">
-        <td class="sticky-col pname"><div class="pname-inner">${specImg(p, 20)}<span class="nm">${esc(p.name)}</span>${p.active === false ? '<span class="rl">inaktiv</span>' : `<span class="rl">${esc(p.status || '')}</span>`}</div></td>
+        <td class="sticky-col pname gr-pn" data-player="${esc(p.id)}" title="Notizen aller Offis zu ${esc(p.name)}"><div class="pname-inner">${specImg(p, 20)}<span class="nm">${esc(p.name)}</span>${notes(p.id) ? `<span class="gr-nc">📝 ${notes(p.id)}</span>` : ''}${p.active === false ? '<span class="rl">inaktiv</span>' : `<span class="rl">${esc(p.status || '')}</span>`}</div></td>
         ${offs.map(o => gradeTd(p.id, o)).join('')}
         <td class="gr-avg"><span class="gr-pill gr-${tone(a)}">${fmt(a)}</span></td>
       </tr>`;
@@ -212,6 +215,7 @@ export function render(root) {
 
   // ── Note setzen ───────────────────────────────────────────
   $('[data-wrap]').addEventListener('click', e => {
+    const pn = e.target.closest('[data-player]'); if (pn) return openNotes(pn.dataset.player);
     const c = e.target.closest('.gr-cell'); if (!c) return;
     const pid = c.dataset.p, uid = c.dataset.u;
     const p = pid === RAID ? { name: 'Raid als Ganzes' } : players.find(x => x.id === pid);
@@ -254,6 +258,45 @@ export function render(root) {
       { label: 'Abbrechen' },
       { label: 'Speichern', cls: 'btn-primary', onClick: () => save(base === '-' ? '-' : base ? base + mod : '') },
     ] });
+  }
+
+  // ── Notizen eines Spielers (alle Offis, auch frühere Runden) ──
+  async function openNotes(pid) {
+    const p = players.find(x => x.id === pid); if (!p) return;
+    const offs = officers();
+    const mine = cell(pid, myUid);
+    const entry = (name, x, me) => `<div class="gr-note ${me ? 'me' : ''}">
+      <div class="gr-note-h"><b>${esc(name)}</b>${x?.n ? `<span class="gr-note-n gr-t${Math.min(val(x.n) || 0, 5)}">${esc(x.n)}</span>` : ''}${x?.at ? `<span class="muted">${new Date(x.at).toLocaleDateString('de-AT')}</span>` : ''}</div>
+      ${x?.c ? `<p>${esc(x.c)}</p>` : '<p class="muted">Keine Notiz</p>'}</div>`;
+    const others = offs.filter(o => !o.me && cell(pid, o.uid)?.c);
+    const body = h(`<div class="gr-notes">
+      <div class="field"><label>Deine Notiz ${mine?.n ? `<span class="muted">· deine Note: ${esc(mine.n)}</span>` : ''}</label>
+        <textarea class="input" name="c" rows="4" maxlength="600" placeholder="z. B. Mechaniken top, Vorbereitung ausbaufähig, Gespräch geführt am …">${esc(mine?.c || '')}</textarea></div>
+      <div class="gr-note-sec">Andere Offis · diese Runde</div>
+      ${others.length ? others.map(o => entry(o.name, cell(pid, o.uid))).join('') : '<p class="muted">Noch keine Notizen von anderen Offis.</p>'}
+      <div data-older></div>
+    </div>`);
+    openModal({ title: `Notizen zu ${p.name}`, body, wide: true, actions: [
+      { label: 'Schließen' },
+      { label: 'Notiz speichern', cls: 'btn-primary', onClick: async () => {
+        const c = body.querySelector('[name=c]').value.trim(), n = mine?.n || '';
+        const key = `${pid}__${myUid}`;
+        if (!n && !c) await store.setMapField(COL, 'grades__' + rid, 'g', key, null);
+        else await store.setMapField(COL, 'grades__' + rid, 'g', key, { n, c, at: new Date().toISOString() });
+        await store.setMapField(COL, 'grades__' + rid, 'officers', myUid, { name: myName });
+        toast('Notiz gespeichert');
+      } },
+    ] });
+    // frühere Runden einmalig laden
+    const older = rounds().filter(r => r.id !== rid);
+    const docs = await Promise.all(older.map(r => new Promise(res => { let un = null; un = store.watchDoc(COL, 'grades__' + r.id, d => { res({ r, d }); setTimeout(() => un?.(), 0); }); })));
+    const html = docs.map(({ r, d }) => {
+      const es = Object.entries(d?.g || {}).filter(([k, v]) => k.startsWith(pid + '__') && (v?.c || v?.n));
+      if (!es.length) return '';
+      return `<div class="gr-note-sec">${esc(r.name)}${r.season ? ' · ' + esc(r.season) : ''}</div>` +
+        es.map(([k, v]) => { const uid = k.split('__')[1]; return entry(d.officers?.[uid]?.name || '?', v, uid === myUid); }).join('');
+    }).join('');
+    const box = body.querySelector('[data-older]'); if (box) box.innerHTML = html;
   }
 
   // ── Daten ─────────────────────────────────────────────────
