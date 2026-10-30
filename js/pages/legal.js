@@ -73,6 +73,7 @@ export function render(root) {
 
             <h4>Roster, Progress & Logs</h4>
             <p>Angezeigt werden Ingame-Charakternamen sowie öffentlich abrufbare Spieldaten (Ausrüstung, Wertungen, Kampf-Logs) von Raider.IO, Warcraft Logs und Blizzard. Für die Raidplanung sehen Offiziere außerdem eure Raid-Anmeldungen und M+ Daten aus <b>wowaudit</b> sowie, wer laut Log an einem Abend dabei war. Möchtest du nicht im öffentlichen Roster stehen, sag einem Offizier Bescheid.</p>
+            <p>Zur Raidplanung halten die Offiziere intern kurze Einschätzungen zu Raidern fest (Schulnote und optional ein Kommentar, z. B. zur Mechanik-Ausführung). Das sehen nur die Offiziere und es wird nicht veröffentlicht. Auf Nachfrage sagen wir dir gern, was über dich vermerkt ist (Art. 6 Abs. 1 lit. f DSGVO).</p>
           </section>
 
           <section id="ds-bewerb">

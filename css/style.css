@@ -2205,3 +2205,34 @@ button.hi-ci { padding: 0; border: 0; cursor: pointer; }
   html.nav-open, html.nav-open body { overflow: hidden; }
 }
 .set-sep { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 4px; }
+
+/* ───────────────────────── Spieler-Noten (Offi) ───────────────────────── */
+.tracker.grades th.gr-off { min-width: 84px; font-size: 12.5px; }
+.tracker.grades th.gr-off.me { color: var(--accent); }
+.gr-me { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; background: var(--accent-dim); color: var(--accent); padding: 1px 5px; border-radius: 4px; margin-left: 3px; }
+.tracker.grades td.gr-mine { background: rgba(176,124,255,.04); }
+.tracker.grades .gr-avg { position: sticky; right: 0; z-index: 2; background: var(--bg-2); min-width: 86px; box-shadow: -4px 0 8px -4px rgba(0,0,0,.6); }
+.tracker.grades thead .gr-avg { z-index: 4; background: var(--surface-3); }
+.tracker.grades tr.group-row td.gr-grp { text-align: center; text-transform: none; letter-spacing: 0; font-size: 12px; }
+.gr-cell { font-variant-numeric: tabular-nums; position: relative; cursor: default; }
+.gr-cell.click { cursor: pointer; }
+.gr-cell:not(.click):hover { background: none !important; }
+.gr-cell.has-c::after { content: ''; position: absolute; top: 0; right: 0; border-style: solid; border-width: 0 8px 8px 0; border-color: transparent var(--gold) transparent transparent; }
+.gr-t1 { color: var(--venom); } .gr-t2 { color: #a6e86b; } .gr-t3 { color: var(--gold); } .gr-t4 { color: #ff9a5c; } .gr-t5 { color: var(--red); }
+.gr-pill { display: inline-block; min-width: 38px; padding: 3px 8px; border-radius: 6px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-3); }
+.gr-pill.gr-g1, .lg.gr-g1 { background: var(--venom-dim); color: var(--venom); }
+.gr-pill.gr-g2, .lg.gr-g2 { background: rgba(166,232,107,.12); color: #a6e86b; }
+.gr-pill.gr-g3, .lg.gr-g3 { background: var(--gold-dim); color: var(--gold); }
+.gr-pill.gr-g4, .lg.gr-g4 { background: var(--red-dim); color: var(--red); }
+.tracker.grades tr.gr-raid td { border-top: 1px solid var(--line-2); }
+.tracker.grades tr.gr-offavg td { height: 32px; font-size: 12px; }
+.gr-edit { display: grid; gap: 14px; }
+.gr-nums { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.gr-num { height: 52px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--surface-2); font: 700 22px var(--display); cursor: pointer; transition: transform .1s, border-color .1s; }
+.gr-num:hover { transform: translateY(-1px); border-color: var(--text-3); }
+.gr-num.active { border-color: currentColor; background: var(--surface-3); box-shadow: 0 0 0 2px currentColor inset; }
+.gr-num.gr-na { color: var(--text-3); }
+.gr-mods { display: flex; gap: 8px; flex-wrap: wrap; }
+.gr-mods .chip:disabled { opacity: .35; cursor: not-allowed; }
+.tracker.grades { table-layout: fixed; }
+.tracker.grades th.gr-off, .tracker.grades .gr-avg { width: auto; }
