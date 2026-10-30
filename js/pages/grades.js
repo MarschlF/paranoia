@@ -235,7 +235,7 @@ export function render(root) {
     const form = h(`<div class="gr-edit">
       <div class="gr-nums">${['1', '2', '3', '4', '5'].map(n => `<button type="button" class="gr-num gr-t${n}" data-n="${n}">${n}</button>`).join('')}
         <button type="button" class="gr-num gr-na" data-n="-" title="Kann ich nicht beurteilen">−</button></div>
-      <div class="gr-mods"><button type="button" class="chip" data-m="+">+ (Tendenz besser)</button><button type="button" class="chip" data-m="-">− (Tendenz schlechter)</button></div>
+      <div class="gr-mods"><button type="button" class="chip" data-m="+">+ (fast eine Note besser)</button><button type="button" class="chip" data-m="-">− (fast eine Note schlechter)</button></div>
       <div class="field"><label>Kommentar <span class="muted">(optional, sehen alle Offis)</span></label>
         <textarea class="input" name="c" rows="3" maxlength="600" placeholder="z. B. Mechaniken top, Vorbereitung ausbaufähig">${esc(cur?.c || '')}</textarea></div>
     </div>`);
