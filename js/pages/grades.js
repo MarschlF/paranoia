@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────
 //  Spieler-Noten (nur Offis) – Reiter „Noten“ in der Raidplanung
-//  Jeder Offi gibt jedem Spieler eine Schulnote (1–5, +/− nur zur Info), Schnitt pro Spieler,
+//  Jeder Offi gibt jedem Spieler eine Schulnote (1–5), Schnitt pro Spieler,
 //  pro Rolle (Tanks / Heiler / DDs) und eine Gesamtnote für den Raid. Mehrere Runden pro Season.
 //
 //  Gespeichert in der Offi-Sammlung „comps“ (nur Offis lesen/schreiben, keine neue Regel nötig):
@@ -49,7 +49,7 @@ export function render(root) {
         <div class="legend">
           <span><i class="lg gr-g1"></i>1–1,5</span><span><i class="lg gr-g2"></i>bis 2,5</span>
           <span><i class="lg gr-g3"></i>bis 3,5</span><span><i class="lg gr-g4"></i>schlechter</span>
-          <span class="muted">· Klick auf deine Spalte = benoten · <b>−</b> = kann ich nicht beurteilen · +/− zählen nicht im Schnitt</span>
+          <span class="muted">· Klick auf deine Spalte = benoten · <b>−</b> = kann ich nicht beurteilen</span>
         </div>
         <div class="spacer"></div>
         <select class="select" data-sort style="width:auto;height:32px;font-size:13px">
@@ -231,20 +231,16 @@ export function render(root) {
 
   function editGrade(pid, p, cur) {
     let base = val(cur?.n) ? String(val(cur.n)) : cur?.n === '-' ? '-' : '';
-    let mod = /[+-]$/.test(cur?.n || '') && cur.n !== '-' ? cur.n.slice(-1) : '';
     const form = h(`<div class="gr-edit">
       <div class="gr-nums">${['1', '2', '3', '4', '5'].map(n => `<button type="button" class="gr-num gr-t${n}" data-n="${n}">${n}</button>`).join('')}
         <button type="button" class="gr-num gr-na" data-n="-" title="Kann ich nicht beurteilen">−</button></div>
-      <div class="gr-mods"><button type="button" class="chip" data-m="+">+ (fast eine Note besser)</button><button type="button" class="chip" data-m="-">− (fast eine Note schlechter)</button></div>
       <div class="field"><label>Kommentar <span class="muted">(optional, sehen alle Offis)</span></label>
         <textarea class="input" name="c" rows="3" maxlength="600" placeholder="z. B. Mechaniken top, Vorbereitung ausbaufähig">${esc(cur?.c || '')}</textarea></div>
     </div>`);
     const sync = () => {
       form.querySelectorAll('[data-n]').forEach(b => b.classList.toggle('active', b.dataset.n === base));
-      form.querySelectorAll('[data-m]').forEach(b => { b.classList.toggle('active', b.dataset.m === mod); b.disabled = !base || base === '-' || (base === '1' && b.dataset.m === '+') || (base === '5' && b.dataset.m === '-'); });
     };
-    form.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { base = b.dataset.n; if (base === '-' || (base === '1' && mod === '+') || (base === '5' && mod === '-')) mod = ''; sync(); });
-    form.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { mod = mod === b.dataset.m ? '' : b.dataset.m; sync(); });
+    form.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { base = b.dataset.n; sync(); });
     sync();
     const save = async n => {
       const c = form.querySelector('[name=c]').value.trim();
@@ -256,7 +252,7 @@ export function render(root) {
     openModal({ title: `Note für ${p?.name || ''}`, body: form, actions: [
       ...(cur ? [{ label: 'Entfernen', cls: 'btn-danger', onClick: () => store.setMapField(COL, 'grades__' + rid, 'g', `${pid}__${myUid}`, null) }] : []),
       { label: 'Abbrechen' },
-      { label: 'Speichern', cls: 'btn-primary', onClick: () => save(base === '-' ? '-' : base ? base + mod : '') },
+      { label: 'Speichern', cls: 'btn-primary', onClick: () => save(base === '-' ? '-' : base || '') },
     ] });
   }
 
@@ -304,7 +300,7 @@ export function render(root) {
     store.watchCol('players', ps => { players = ps; draw(); }),
     store.watchDoc('settings', 'main', s => { settings = s || {}; draw(); }),
     store.watchDoc(COL, INDEX, async d => {
-      if (!d && DEMO_MODE) return seedDemo();
+      if (DEMO_MODE && (d?.seed || 0) < 2) return seedDemo();   // Vorschau-Daten (Version 2: ohne +/−)
       const before = JSON.stringify(index?.rounds || {});
       index = d || { rounds: {} };
       if (JSON.stringify(index.rounds || {}) !== before || !round) pickRound(); else draw();
@@ -314,17 +310,17 @@ export function render(root) {
 
   // Vorschau: eine Runde mit Noten von vier Beispiel-Offis
   async function seedDemo() {
-    const id = 'demo1';
+    const id = 'demo2';
     await store.set(COL, 'grades__' + id, { g: {}, officers: { o1: { name: 'Drea' }, o2: { name: 'Peach' }, o3: { name: 'Soro' } } });
     const g = {};
     const act = players.filter(p => p.active !== false);
     act.forEach((p, i) => ['o1', 'o2', 'o3'].forEach((o, j) => {
       if ((i + j) % 11 === 7) return;
       const n = 1 + ((i * 7 + j * 3) % 9 > 6 ? 3 : (i * 5 + j) % 3) + (i % 13 === 4 ? 1 : 0);
-      g[`${p.id}__${o}`] = { n: String(n) + ((i + j) % 5 === 1 ? '+' : (i + j) % 7 === 2 ? '-' : ''), c: (i + j) % 9 === 0 ? 'Mechaniken sauber, Consumables manchmal vergessen.' : '', at: new Date().toISOString() };
+      g[`${p.id}__${o}`] = { n: String(n), c: (i + j) % 9 === 0 ? 'Mechaniken sauber, Consumables manchmal vergessen.' : '', at: new Date().toISOString() };
     }));
-    ['o1', 'o2', 'o3'].forEach((o, j) => g[`${RAID}__${o}`] = { n: ['3', '2', '3-'][j], c: '' });
+    ['o1', 'o2', 'o3'].forEach((o, j) => g[`${RAID}__${o}`] = { n: ['3', '2', '3'][j], c: '' });
     await store.set(COL, 'grades__' + id, { g });
-    await store.set(COL, INDEX, { rounds: { [id]: { name: 'Mid-Season', season: settings.season || 'Season 2', created: new Date().toISOString() } } });
+    await store.set(COL, INDEX, { seed: 2, rounds: { [id]: { name: 'Mid-Season', season: settings.season || 'Season 2', created: new Date().toISOString() } } });
   }
 }
