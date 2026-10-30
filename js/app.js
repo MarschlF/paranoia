@@ -69,6 +69,7 @@ function render() {
   document.querySelectorAll('[data-route]').forEach(a =>
     a.classList.toggle('active', a.dataset.route === (key || 'home')));
   document.getElementById('nav-menu').classList.remove('open');
+  document.documentElement.classList.remove('nav-open');
 
   if (route.access !== 'public' && !auth.isMember) return renderWall();
   if (route.access === 'officer' && !auth.isOfficer) return renderOfficerWall();
@@ -219,7 +220,10 @@ function watchFooter() {
 }
 
 // ── Start ───────────────────────────────────────────────────
-document.getElementById('nav-toggle').onclick = () => document.getElementById('nav-menu').classList.toggle('open');
+document.getElementById('nav-toggle').onclick = () => {
+  const open = document.getElementById('nav-menu').classList.toggle('open');
+  document.documentElement.classList.toggle('nav-open', open);   // Handy: Seite dahinter nicht mitscrollen
+};
 
 if (DEMO_MODE) document.getElementById('demo-banner').classList.remove('hidden');
 

@@ -295,27 +295,27 @@ function renderSims(body) {
       return r.levels.map(l => {
         const idx = levels.indexOf(l.ilvl), seg = Math.max(0, l.pct - prev); prev = Math.max(prev, l.pct);
         const w = seg / max * 100;
-        return `<span class="bm-seg ${st.palette === 'bm' ? 'pal' : ''}" style="width:${w}%;${segStyle(idx)}" title="${l.ilvl}: ${fmt(l.pct)}"><em>${l.ilvl}</em></span>`;
+        return `<span class="tk-seg ${st.palette === 'bm' ? 'pal' : ''}" style="width:${w}%;${segStyle(idx)}" title="${l.ilvl}: ${fmt(l.pct)}"><em>${l.ilvl}</em></span>`;
       }).join('');
     };
     tBox.innerHTML = `
       <div class="card card-pad sims-controls">
-        <div class="field bm-search" style="flex:1;min-width:240px"><label>Trinket <span class="muted">(${items.length})</span></label>
+        <div class="field tk-search" style="flex:1;min-width:240px"><label>Trinket <span class="muted">(${items.length})</span></label>
           <input class="input" data-item value="${esc(it.name)}" placeholder="🔍 Trinket suchen (Deutsch oder Englisch)…" autocomplete="off" spellcheck="false">
-          <div class="bm-sugg" data-sugg hidden></div></div>
+          <div class="tk-sugg" data-sugg hidden></div></div>
         <div class="field"><label>Farben</label><div class="seg" data-pal><button data-v="bm" class="${st.palette === 'bm' ? 'on' : ''}">Bloodmallet</button><button data-v="cls" class="${st.palette === 'cls' ? 'on' : ''}">Klassenfarbe</button></div></div>
         <div class="field"><label>Ziele</label><div class="seg" data-tfight>${Object.entries(BM_FIGHT).map(([k, v]) => `<button data-v="${k}" class="${k === st.fight ? 'on' : ''}">${v}</button>`).join('')}</div></div>
         <label class="check-row"><input type="checkbox" data-ours ${st.ours ? 'checked' : ''}> nur Specs aus unserem Roster</label>
       </div>
       <div class="card card-pad">
-        <div class="bm-head"><div><div class="bm-title">${it.id ? `<a href="https://www.wowhead.com/de/item=${Number(it.id)}" target="_blank" rel="noopener">${esc(it.name)}</a>` : esc(it.name)}</div>
+        <div class="tk-head"><div><div class="tk-title">${it.id ? `<a href="https://www.wowhead.com/de/item=${Number(it.id)}" target="_blank" rel="noopener">${esc(it.name)}</a>` : esc(it.name)}</div>
           <div class="hint">Mehr Schaden gegenüber keinem Trinket · ${esc(BM_FIGHT[st.fight])} · ${rows.length} von ${total} Specs</div></div>
-          <div class="bm-legend" title="Klicken zum Aus-/Einblenden">${levels.map((l, i) => `<button class="${hidden.has(l) ? 'off' : ''}" data-lv="${l}"><i class="${st.palette === 'bm' ? 'pal' : ''}" style="${segStyle(i)}"></i>${l}</button>`).join('')}</div></div>
-        <div class="bm-bars">${rows.map(r => `
-          <div class="bm-row ${ourSpecs.has(`${r.klasse}|${r.spec}`) ? 'ours' : ''}" style="--cls:${clsColor(r.klasse)}">
-            <span class="bm-spec">${specIcon(r.klasse, r.spec) ? `<img src="${specIcon(r.klasse, r.spec)}" alt="">` : ''}<b>${esc(r.spec)}</b><small>${esc(CLASSES[r.klasse]?.name || '')}</small></span>
-            <div class="bm-bar stack">${bar(r)}</div>
-            <span class="bm-val ${r.top < 0 ? 'neg' : ''}" title="${r.levels.map(l => `${l.ilvl}: ${fmt(l.pct)}`).join(' · ')}">${fmt(r.top)}</span>
+          <div class="tk-legend" title="Klicken zum Aus-/Einblenden">${levels.map((l, i) => `<button class="${hidden.has(l) ? 'off' : ''}" data-lv="${l}"><i class="${st.palette === 'bm' ? 'pal' : ''}" style="${segStyle(i)}"></i>${l}</button>`).join('')}</div></div>
+        <div class="tk-bars">${rows.map(r => `
+          <div class="tk-row ${ourSpecs.has(`${r.klasse}|${r.spec}`) ? 'ours' : ''}" style="--cls:${clsColor(r.klasse)}">
+            <span class="tk-spec">${specIcon(r.klasse, r.spec) ? `<img src="${specIcon(r.klasse, r.spec)}" alt="">` : ''}<b>${esc(r.spec)}</b><small>${esc(CLASSES[r.klasse]?.name || '')}</small></span>
+            <div class="tk-bar stack">${bar(r)}</div>
+            <span class="tk-val ${r.top < 0 ? 'neg' : ''}" title="${r.levels.map(l => `${l.ilvl}: ${fmt(l.pct)}`).join(' · ')}">${fmt(r.top)}</span>
           </div>`).join('') || '<p class="muted">Keine Specs aus dem Roster mit Daten für dieses Trinket.</p>'}</div>
         <p class="hint" style="margin-top:10px">Balken-Abschnitte = Itemlevel (dunkel → hell = niedrig → hoch). Klick auf ein Itemlevel oben rechts blendet es aus. Zahl rechts = höchstes sichtbares Itemlevel. Maus drauf zeigt alle Werte.${matrix.updated ? ` · Stand Bloodmallet: ${esc(String(matrix.updated).slice(0, 16).replace('T', ' '))}` : ''}</p>
       </div>`;

@@ -348,12 +348,15 @@ export function render(root) {
     const file = `comp-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${diff}.png`;
     const nd = raidDates(settings).find(d => d >= todayIso());
     const prev = comps[compId()]?.discord;
+    const roleId = /^\d{5,25}$/.test(String(settings.reminder?.roleId || '')) ? String(settings.reminder.roleId) : '';
     const defMsg = `**Aufstellung ${DIFFS[diff].label}${nd ? ` · ${WD[parseIso(nd).getDay()]} ${fmtShort(nd)}` : ''}**`;
     const body = h(`<div>
       <img src="${url}" alt="Raid-Setup" style="width:100%;border-radius:10px;border:1px solid var(--line)">
       <div class="field" style="margin-top:14px"><label>Nachricht dazu (optional)</label>
         <input class="input" data-msg maxlength="500" value="${esc(defMsg)}"></div>
       ${prev?.id ? `<label class="check-row" style="margin-top:10px"><input type="checkbox" data-replace checked> Letzten Post ersetzen <span class="muted">(${esc(prev.at ? new Date(prev.at).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '')}${prev.by ? ' · ' + esc(prev.by) : ''})</span></label>` : ''}
+      ${roleId ? `<label class="check-row" style="margin-top:6px"><input type="checkbox" data-ping ${prev?.id ? '' : 'checked'}> Raider-Rolle pingen</label>`
+        : '<p class="hint" style="margin-top:8px">Rollen-Ping: Rollen-ID unter Progress → Raid-Einstellungen → Discord-Reminder eintragen.</p>'}
       <p class="hint" style="margin-top:10px">„In Discord posten" schickt das Bild direkt in euren Raid-Channel. Alternativ kopieren und mit Strg+V einfügen.</p>
     </div>`);
     openModal({
@@ -367,7 +370,7 @@ export function render(root) {
         } },
         { label: 'In Discord posten', cls: 'btn-discord', onClick: async () => {
           const replace = body.querySelector('[data-replace]')?.checked ? prev.id : '';
-          const r = await postToDiscord(blob, body.querySelector('[data-msg]').value.trim(), replace);
+          const r = await postToDiscord(blob, body.querySelector('[data-msg]').value.trim(), replace, body.querySelector('[data-ping]')?.checked ? roleId : '');
           if (!r) return true;
           await store.set('comps', compId(), { discord: { id: r.id, at: new Date().toISOString(), by: auth.user?.name || '' } });
           toast(replace ? 'Post in Discord ersetzt' : 'In Discord gepostet');
@@ -377,11 +380,11 @@ export function render(root) {
   }
 
   /** Bild über den Worker in den Discord-Channel schicken → { id } oder null */
-  async function postToDiscord(blob, content, replace) {
+  async function postToDiscord(blob, content, replace, pingRole = '') {
     if (DEMO_MODE) { await new Promise(r => setTimeout(r, 400)); return { id: String(Date.now()) }; }
     if (!CONFIG.authWorkerUrl) { toast('Worker-URL fehlt in js/config.js', 'err'); return null; }
     const fd = new FormData();
-    fd.append('file', blob, 'comp.png'); fd.append('content', content); if (replace) fd.append('replace', replace);
+    fd.append('file', blob, 'comp.png'); fd.append('content', content); if (replace) fd.append('replace', replace); if (pingRole) fd.append('pingRole', pingRole);
     try {
       const res = await fetch(`${CONFIG.authWorkerUrl.replace(/\/$/, '')}/discord/comp`, {
         method: 'POST', body: fd, headers: { Authorization: `Bearer ${await auth.idToken()}` },

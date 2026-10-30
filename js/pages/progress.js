@@ -2,6 +2,7 @@
 //  Progress: #/progress = Raid-Übersicht · #/progress/<raidId> = Bosse
 // ─────────────────────────────────────────────────────────────
 import { store, auth } from '../store.js';
+import { CONFIG, DEMO_MODE } from '../config.js';
 import { esc, h, openModal, toast, fmtDate, raidBosses } from '../ui.js';
 import { getWcl, mergeBoss } from '../wcl.js';
 import { openProgCurve } from '../progcurve.js';
@@ -144,6 +145,7 @@ function renderRaid(root, raidId) {
 // ── Raid-Einstellungen ──────────────────────────────────────
 function editSettings(s, raids, bosses) {
   const wd = new Set(s.raidWeekdays || [2, 4]);
+  const rem = { on: false, daysBefore: 2, time: '12:00', ping: true, roleId: '', ...(s.reminder || {}) };
   const days = [[1, 'Mo'], [2, 'Di'], [3, 'Mi'], [4, 'Do'], [5, 'Fr'], [6, 'Sa'], [0, 'So']];
   const form = h(`
     <div class="form-grid">
@@ -156,11 +158,45 @@ function editSettings(s, raids, bosses) {
       <div class="field"><label>Raid-Beginn</label><input class="input" type="time" name="raidStart" value="${esc(s.raidStart || '')}"></div>
       <div class="field"><label>Raid-Ende</label><input class="input" type="time" name="raidEnd" value="${esc(s.raidEnd || '')}"></div>
       <div class="field full"><label>Raidtage</label>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">${days.map(([n, l]) =>
+        <div data-wd style="display:flex;gap:6px;flex-wrap:wrap">${days.map(([n, l]) =>
           `<label class="chip ${wd.has(n) ? 'active' : ''}" style="display:inline-flex;align-items:center"><input type="checkbox" value="${n}" ${wd.has(n) ? 'checked' : ''} style="display:none">${l}</label>`).join('')}</div>
         <span class="hint">Die Spalten im Rotation Planer und Loot Tracker werden daraus automatisch erzeugt. Zusätzliche oder ausgefallene Raidtage kannst du direkt im Rotation Planer setzen.</span>
       </div>
+      <div class="field full set-sep"><label>Discord-Reminder</label>
+        <label class="check-row"><input type="checkbox" name="remOn" ${rem.on ? 'checked' : ''}> Automatisch erinnern, wer sich in wowaudit noch nicht an- oder abgemeldet hat</label>
+        <span class="hint">Postet in den Raidanmeldung-Channel (gleicher Webhook wie das Comp-Bild). Haben alle geantwortet, kommt keine Nachricht.</span>
+      </div>
+      <div class="field"><label>Wann</label>
+        <div style="display:flex;gap:8px;align-items:center"><select class="select" name="remDays" style="width:auto">${[1, 2, 3, 4].map(n => `<option value="${n}" ${Number(rem.daysBefore) === n ? 'selected' : ''}>${n} ${n === 1 ? 'Tag' : 'Tage'} vorher</option>`).join('')}</select>
+        <span>um</span><input class="input" type="time" name="remTime" value="${esc(rem.time)}" style="width:auto"></div>
+        <span class="hint" data-remex></span>
+      </div>
+      <div class="field"><label>Rollen-ID für den Ping <span class="muted">(optional)</span></label>
+        <input class="input" name="remRole" value="${esc(rem.roleId || '')}" placeholder="z. B. 123456789012345678" inputmode="numeric">
+        <label class="check-row" style="margin-top:6px"><input type="checkbox" name="remPing" ${rem.ping ? 'checked' : ''}> Rolle pingen</label>
+      </div>
+      <div class="field full"><button type="button" class="btn btn-ghost btn-sm" data-remtest>Testnachricht jetzt senden</button>
+        <span class="hint">Schickt die Liste für den nächsten Raid sofort in den Channel – ohne Ping, mit „Test“ markiert.</span></div>
     </div>`);
+  // Beispiel „Sonntag 12:00 für Dienstag“ live anzeigen
+  const WDN = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+  const remEx = () => {
+    const n = Number(form.querySelector('[name=remDays]').value), t = form.querySelector('[name=remTime]').value || '12:00';
+    const sel = [...form.querySelectorAll('[data-wd] input:checked')].map(c => Number(c.value)).sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
+    form.querySelector('[data-remex]').textContent = sel.length ? sel.map(d => `${WDN[(d - n + 7) % 7]} ${t} für ${WDN[d]}`).join(' · ') : '';
+  };
+  form.querySelector('[name=remDays]').onchange = remEx; form.querySelector('[name=remTime]').oninput = remEx;
+  form.querySelector('[data-remtest]').onclick = async e => {
+    const b = e.target; b.disabled = true; b.textContent = 'Wird gesendet…';
+    try {
+      if (DEMO_MODE || !CONFIG.authWorkerUrl) { toast('In der Vorschau wird nichts gesendet'); return; }
+      const t = await auth.idToken();
+      const r = await fetch(`${CONFIG.authWorkerUrl.replace(/\/$/, '')}/reminder/test`, { method: 'POST', headers: { Authorization: `Bearer ${t}` } });
+      const j = await r.json().catch(() => ({}));
+      toast(r.status === 404 ? 'Worker noch nicht aktualisiert' : j.ok ? `Testnachricht gesendet (${j.open} offen)` : `Nicht gesendet: ${j.skipped || j.error || r.status}`, j.ok ? 'ok' : 'err');
+    } catch { toast('Worker nicht erreichbar', 'err'); }
+    finally { b.disabled = false; b.textContent = 'Testnachricht jetzt senden'; }
+  };
   // anderen Raid wählen → dessen Zeitraum eintragen
   form.querySelector('[name=currentRaid]').onchange = e => {
     const r = raids.find(x => x.id === e.target.value);
@@ -168,8 +204,9 @@ function editSettings(s, raids, bosses) {
     if (r?.endDate) form.querySelector('[name=endDate]').value = r.endDate;
   };
   form.querySelectorAll('label.chip').forEach(l => l.onclick = (e) => {
-    e.preventDefault(); const cb = l.querySelector('input'); cb.checked = !cb.checked; l.classList.toggle('active', cb.checked);
+    e.preventDefault(); const cb = l.querySelector('input'); cb.checked = !cb.checked; l.classList.toggle('active', cb.checked); remEx();
   });
+  remEx();
   openModal({
     title: 'Raid-Einstellungen', body: form,
     actions: [{ label: 'Abbrechen' }, { label: 'Speichern', cls: 'btn-primary', onClick: async () => {
@@ -178,7 +215,11 @@ function editSettings(s, raids, bosses) {
       if (raid && raid.id !== s.currentRaid) await setCurrentRaid(raid);
       await store.set('settings', 'main', {
         startDate: v('startDate'), endDate: v('endDate'), raidStart: v('raidStart'), raidEnd: v('raidEnd'),
-        raidWeekdays: [...form.querySelectorAll('input[type=checkbox]:checked')].map(c => Number(c.value)),
+        raidWeekdays: [...form.querySelectorAll('[data-wd] input:checked')].map(c => Number(c.value)),
+        reminder: {
+          on: form.querySelector('[name=remOn]').checked, daysBefore: Number(v('remDays')), time: v('remTime') || '12:00',
+          ping: form.querySelector('[name=remPing]').checked, roleId: v('remRole').trim().replace(/\D/g, ''),
+        },
       });
       // Zeitraum gehört zum Raid – dort mitspeichern
       if (raid) await store.set('raids', raid.id, { startDate: v('startDate'), endDate: v('endDate') });

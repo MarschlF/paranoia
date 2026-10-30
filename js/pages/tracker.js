@@ -4,7 +4,7 @@
 //  att = von Hand (gewinnt), auto = aus Warcraft Logs + wowaudit (autorota.js)
 // ─────────────────────────────────────────────────────────────
 import { store, auth } from '../store.js';
-import { STATUSES, ROLES, clsColor, esc, h, specImg, raidDates, todayIso, fmtShort, fmtDate, parseIso, WD, MONTHS, openModal, toast } from '../ui.js';
+import { STATUSES, ROLES, clsColor, esc, h, specImg, raidDates, todayIso, fmtShort, fmtDate, parseIso, WD, MONTHS, openModal, toast, fold } from '../ui.js';
 import { openPlayerManager } from '../players.js';
 import { openRclcImport } from '../rclc.js';
 import { effAtt, isAuto, syncAutoRotation, lastSync, playerFor } from '../autorota.js';
@@ -203,20 +203,29 @@ export function render(root, { mode }) {
     const box = el.querySelector('[data-um]'); if (!box) return;
     if (!canEdit) { box.innerHTML = ''; return; }
     const seen = new Map();
-    dates.forEach(d => (days[d]?.autoUnmatched || []).forEach(n => { if (!seen.has(n)) seen.set(n, d); }));
+    const ign = new Set((settings?.autoIgnore || []).map(fold));
+    dates.forEach(d => (days[d]?.autoUnmatched || []).forEach(n => { if (!seen.has(n) && !ign.has(fold(n))) seen.set(n, d); }));
     if (!seen.size) { box.innerHTML = ''; return; }
-    box.innerHTML = `<div class="auto-um">⚠️ Im Log, aber keinem Spieler zugeordnet: ${[...seen].map(([n, d]) =>
-      `<button class="chip" data-um-name="${esc(n)}" title="${fmtDate(d)} · Klick zum Zuordnen">${esc(n)} <span class="muted">${fmtShort(d)}</span></button>`).join('')}</div>`;
+    box.innerHTML = `<div class="auto-um">⚠️ Im Gildenraid, aber keinem Spieler zugeordnet: ${[...seen].map(([n, d]) =>
+      `<button class="chip" data-um-name="${esc(n)}" title="${fmtDate(d)} · Klick zum Zuordnen oder Ignorieren">${esc(n)} <span class="muted">${fmtShort(d)}</span></button>`).join('')}
+      <button class="chip um-all" data-um-all title="Alle diese Namen ignorieren (keine Gildenmitglieder)">Alle ignorieren</button></div>`;
     box.querySelectorAll('[data-um-name]').forEach(b => b.onclick = () => assignAlt(b.dataset.umName));
+    box.querySelector('[data-um-all]').onclick = async () => {
+      await store.set('settings', 'main', { autoIgnore: [...new Set([...(settings.autoIgnore || []), ...seen.keys()])] });
+      toast(`${seen.size} Namen werden ignoriert`);
+    };
   }
   function assignAlt(name) {
     const active = players.filter(p => p.active !== false).sort((a, b) => a.name.localeCompare(b.name));
     const body = h(`<div class="form-grid">
       <div class="field full"><label>„${esc(name)}“ gehört zu</label>
         <select class="select" data-pl><option value="">– Spieler wählen –</option>${active.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>
-      <p class="hint full">Wird als Twink beim Spieler gespeichert und ab jetzt automatisch erkannt.</p>
+      <p class="hint full">Wird als Twink beim Spieler gespeichert und ab jetzt automatisch erkannt. Kein Gildenmitglied (Trial, Aushilfe)? Dann „Ignorieren“ – der Name wird nicht mehr gemeldet.</p>
     </div>`);
-    openModal({ title: 'Twink zuordnen', body, actions: [{ label: 'Abbrechen' }, { label: 'Zuordnen', cls: 'btn-primary', onClick: async () => {
+    openModal({ title: 'Name aus dem Log', body, actions: [{ label: 'Ignorieren', onClick: async () => {
+      await store.set('settings', 'main', { autoIgnore: [...new Set([...(settings.autoIgnore || []), name])] });
+      toast(`${name} wird ignoriert`);
+    } }, { label: 'Zuordnen', cls: 'btn-primary', onClick: async () => {
       const pid = body.querySelector('[data-pl]').value;
       if (!pid) { toast('Spieler wählen', 'err'); return true; }
       const p = players.find(x => x.id === pid);

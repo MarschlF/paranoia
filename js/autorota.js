@@ -4,6 +4,9 @@
 //  raidDays/<datum>.att  = { pid: 'X' | 'B' | 'A' | '-' }  (von Hand – gewinnt immer, '-' = bewusst leer)
 //  raidDays/<datum>.autoUnmatched = [Namen aus dem Log, die keinem Spieler zugeordnet sind]
 //
+//  Nur Gildenraids zählen: ein Log zählt, wenn mind. die Hälfte der Teilnehmer UND mind. 8 aus dem Roster sind
+//  (Random-Raids einzelner Spieler werden so komplett ignoriert). Namen in settings.autoIgnore werden nie gemeldet.
+//
 //  Regeln:  im Log bei einem Bosspull       → X (dabei)
 //           Log vorhanden, nicht drin, in wowaudit zugesagt/Standby/Später/Vielleicht → B (Bench)
 //           in wowaudit abgesagt             → A (abgemeldet)
@@ -29,6 +32,19 @@ export function playerFor(players, name) {
 }
 
 const STAMP = 'pn-autorota-at';
+export const GUILD_MIN = 8, GUILD_SHARE = 0.5;
+
+/** Reports eines Abends → nur die Gildenraids (ältere Worker liefern eine flache Spielerliste) */
+function guildReports(log, active) {
+  if (!log) return null;
+  const reports = log.length && log[0]?.players ? log : [{ players: log }];
+  const keep = reports.filter(r => {
+    const n = r.players.length; if (!n) return false;
+    const m = r.players.filter(x => playerFor(active, x.name)).length;
+    return m >= Math.min(GUILD_MIN, n) && m / n >= GUILD_SHARE;
+  });
+  return keep.length ? keep : null;
+}
 const addDays = (iso, n) => { const d = parseIso(iso); d.setDate(d.getDate() + n); return isoDate(d); };
 
 /**
@@ -64,10 +80,15 @@ export async function syncAutoRotation({ settings, players, days, full = false, 
   let changed = 0, unmatched = 0;
   for (const d of dates) {
     const src = data.days?.[d] || {};
-    const log = src.log, signups = src.signups;
+    const log = guildReports(src.log, active), signups = src.signups;
     const inLog = new Set(), status = {};
     const um = [];
-    (log || []).forEach(x => { const p = playerFor(active, x.name); if (p) inLog.add(p.id); else um.push(x.name); });
+    const ignore = new Set((settings.autoIgnore || []).map(fold));
+    (log || []).flatMap(r => r.players).forEach(x => {
+      const p = playerFor(active, x.name);
+      if (p) inLog.add(p.id);
+      else if (!ignore.has(fold(x.name)) && !um.includes(x.name)) um.push(x.name);
+    });
     (signups || []).forEach(x => { const p = playerFor(active, x.name); if (p) status[p.id] = x.status; });
 
     const auto = {};
