@@ -304,6 +304,12 @@ export function render(root) {
       const before = JSON.stringify(index?.rounds || {});
       index = d || { rounds: {} };
       if (JSON.stringify(index.rounds || {}) !== before || !round) pickRound(); else draw();
+    }, err => {
+      $('[data-wrap]').innerHTML = `<div class="empty" style="padding:40px;text-align:center">
+        <p style="font-size:15px;margin-bottom:6px">⚠️ Noten konnten nicht geladen werden.</p>
+        <p class="muted">${err?.code === 'permission-denied' ? 'Keine Berechtigung – bitte einmal ab- und wieder anmelden.' : 'Verbindung zur Datenbank fehlgeschlagen – Seite neu laden, ggf. Adblocker für diese Seite ausschalten.'}</p>
+        <p class="muted" style="font-size:12px;margin-top:8px">${esc(err?.code || err?.message || '')}</p></div>`;
+      $('[data-new]').disabled = true;
     }),
   ];
   return () => { unsub.forEach(u => u()); unRound?.(); };
