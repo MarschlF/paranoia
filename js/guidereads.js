@@ -68,12 +68,15 @@ export function readStatus(bossId, guide, allReads, players) {
 export function openReadStatus(boss, guide, allReads, players) {
   const body = h('<div></div>');
   const { close } = openModal({ title: `Gelesen · ${boss?.name || ''}`, body, wide: true });
-  let reads = allReads;
+  let reads = allReads, openMapped = false;
   const fmt = iso => iso ? new Date(iso).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
   const chip = p => `<span class="abs-pill" style="--cls:${clsColor(p.klasse)}">${specImg(p, 16)}${esc(p.name)}</span>`;
 
   function draw() {
     const s = readStatus(boss.id, guide, reads, players);
+    const all = sortPlayers(players.filter(p => p.active !== false));
+    const opts = cur => all.map(p => `<option value="${esc(p.id)}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+    const mapped = reads.filter(d => d.playerId).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'de'));
     const okList = s.read.filter(x => !x.old).sort((a, b) => String(b.at).localeCompare(String(a.at)));
     const oldIds = new Set(s.read.filter(x => x.old).map(x => x.p.id));
     body.innerHTML = `
@@ -86,12 +89,18 @@ export function openReadStatus(boss, guide, allReads, players) {
           ${okList.map(x => `<div class="side-row"><span>${chip(x.p)}</span><span class="muted">${fmt(x.at)}</span></div>`).join('') || '<span class="muted">Noch niemand.</span>'}</div>
       </div>
       ${s.unmatched.length ? `<div class="rc-unknown" style="margin-top:18px"><div class="comp-section-title" style="margin-bottom:8px">Discord-Namen ohne Roster-Spieler – einmal zuordnen (gilt für alle Guides)</div>
-        ${s.unmatched.map(d => `<div class="rc-map"><span>${esc(d.name || d.id)}</span><select class="select" data-map="${esc(d.id)}"><option value="">– wählen –</option>${sortPlayers(players.filter(p => p.active !== false)).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>`).join('')}</div>` : ''}`;
+        ${s.unmatched.map(d => `<div class="rc-map"><span>${esc(d.name || d.id)}</span><select class="select" data-map="${esc(d.id)}"><option value="">– wählen –</option>${opts('')}</select></div>`).join('')}</div>` : ''}
+      ${mapped.length ? `<details class="rc-unknown gr-mapped" style="margin-top:14px"><summary class="comp-section-title" style="cursor:pointer">Zuordnungen ändern (${mapped.length})</summary>
+        <p class="hint" style="margin:6px 0 10px">Discord-Name → Roster-Spieler. Gilt auch für die Online-Anzeige. „Zuordnung entfernen“ = wieder automatisch über den Namen.</p>
+        ${mapped.map(d => `<div class="rc-map"><span>${esc(d.name || d.id)}</span><select class="select" data-map="${esc(d.id)}"><option value="__none">– Zuordnung entfernen –</option>${opts(d.playerId)}</select></div>`).join('')}</details>` : ''}`;
+    if (openMapped) body.querySelector('.gr-mapped')?.setAttribute('open', '');
+    body.querySelector('.gr-mapped')?.addEventListener('toggle', e => { openMapped = e.target.open; });
     body.querySelectorAll('[data-map]').forEach(sel => sel.onchange = async () => {
       if (!sel.value) return;
-      await store.set('guideReads', sel.dataset.map, { playerId: sel.value });
-      reads = reads.map(d => d.id === sel.dataset.map ? { ...d, playerId: sel.value } : d);
-      toast('Zugeordnet'); draw();
+      const pid = sel.value === '__none' ? null : sel.value;
+      await store.set('guideReads', sel.dataset.map, { playerId: pid });
+      reads = reads.map(d => d.id === sel.dataset.map ? { ...d, playerId: pid } : d);
+      toast(pid ? 'Zugeordnet' : 'Zuordnung entfernt'); draw();
     });
   }
   draw();
