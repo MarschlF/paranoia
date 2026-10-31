@@ -8,6 +8,8 @@ import { getWcl, mergeBoss } from '../wcl.js';
 import { openProgCurve } from '../progcurve.js';
 import { BOSS_STATUS, sortRaids, editBoss, editRaid, setCurrentRaid, adoptSeasonDates, raidCardsHtml, raidBannerHtml, watchBossCovers } from '../raids.js';
 
+const REM_TEXT = '⏰ Anmeldungen für {tag} noch offen.\nBitte an- oder abmelden: {namen}';   // Standardtext (gleich wie worker/reminder.js)
+
 export function render(root, { params }) {
   return params[0] ? renderRaid(root, decodeURIComponent(params[0])) : renderOverview(root);
 }
@@ -175,6 +177,9 @@ function editSettings(s, raids, bosses) {
         <input class="input" name="remRole" value="${esc(rem.roleId || '')}" placeholder="z. B. 123456789012345678" inputmode="numeric">
         <label class="check-row" style="margin-top:6px"><input type="checkbox" name="remPing" ${rem.ping ? 'checked' : ''}> Rolle pingen</label>
       </div>
+      <div class="field full"><label>Text der Erinnerung</label>
+        <textarea class="input" name="remText" rows="3" maxlength="1500">${esc(rem.text || REM_TEXT)}</textarea>
+        <span class="hint">Platzhalter: <code>{tag}</code> = Dienstag, 03.11. · <code>{wochentag}</code> · <code>{datum}</code> · <code>{uhrzeit}</code> = Raidbeginn · <code>{namen}</code> = wer in wowaudit noch nicht geantwortet hat · <code>{anzahl}</code>. Der Rollen-Ping kommt automatisch davor.</span></div>
       <div class="field full"><button type="button" class="btn btn-ghost btn-sm" data-remtest>Testnachricht jetzt senden</button>
         <span class="hint">Schickt die Liste für den nächsten Raid sofort in den Channel – ohne Ping, mit „Test“ markiert.</span></div>
     </div>`);
@@ -219,6 +224,7 @@ function editSettings(s, raids, bosses) {
         reminder: {
           on: form.querySelector('[name=remOn]').checked, daysBefore: Number(v('remDays')), time: v('remTime') || '12:00',
           ping: form.querySelector('[name=remPing]').checked, roleId: v('remRole').trim().replace(/\D/g, ''),
+          text: v('remText').trim() === REM_TEXT ? '' : v('remText').trim(),
         },
       });
       // Zeitraum gehört zum Raid – dort mitspeichern
