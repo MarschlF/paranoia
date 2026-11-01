@@ -19,7 +19,7 @@ export const auth = {
   get isOfficer() { return !!currentUser?.officer; },
   onChange(cb) { authListeners.add(cb); cb(currentUser); return () => authListeners.delete(cb); },
   login() {
-    if (DEMO_MODE) return;
+    if (DEMO_MODE) return this.setDemoRole(true);
     if (!CONFIG.authWorkerUrl) { alert('authWorkerUrl fehlt in js/config.js'); return; }
     sessionStorage.setItem('pn-return', location.hash || '#/');
     const back = location.origin + location.pathname;
@@ -37,6 +37,7 @@ export const auth = {
   /** Nur Demo: zwischen Offizier- und Raider-Ansicht wechseln */
   setDemoRole(officer) {
     if (!DEMO_MODE) return;
+    if (officer === 'guest') return emitAuth(null);   // Demo: ausgeloggt ansehen
     emitAuth({ uid: 'demo', name: officer ? 'Demo-Offizier' : 'Demo-Raider', avatar: '', member: true, officer });
   },
 };

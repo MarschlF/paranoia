@@ -47,3 +47,18 @@ export function tip() {
   let i; do { i = Math.floor(Math.random() * TIPS.length); } while (i === last && TIPS.length > 1);
   last = i; return TIPS[i];
 }
+
+// Login-Sperre (ausgeloggt) und Offi-Sperre (Raider auf Offi-Seiten)
+const WALL = {
+  member: [
+    'Halt, Reisender. Dieser Bereich ist den Mitgliedern von Paranøia vorbehalten.',
+    'Die Bibliothek von Karazhan öffnet sich nur Eingeweihten. Melde dich an.',
+    'Ich spüre keine Discord-Aura an dir. Zeig dich, dann lasse ich dich ein.',
+  ],
+  officer: [
+    'Diese Gemächer sind dem Rat vorbehalten, Abenteurer.',
+    'Selbst ich musste Jahre warten, bis mich die Kirin Tor in ihren Rat ließen.',
+    'Hier planen die Offiziere. Was sie hier aushecken, erfährst du früh genug.',
+  ],
+};
+export function wallQuote(type) { const l = WALL[type] || WALL.member; return l[Math.floor(Math.random() * l.length)]; }

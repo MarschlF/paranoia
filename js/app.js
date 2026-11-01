@@ -8,7 +8,7 @@ import { RUF, hasGuide, isRead, watchMine } from './guidereads.js';
 import { watchMyAnswer } from './polls.js';
 import { startPresence, isOnline, presencePlayer, ago } from './presence.js';
 import { watchStatus } from './status.js';
-import { KHADGAR_IMG, quote, tip } from './khadgar.js';
+import { KHADGAR_IMG, quote, tip, wallQuote } from './khadgar.js';
 import * as polls from './pages/polls.js';
 import { raidBosses, raidDates, todayIso, parseIso, WD } from './ui.js';
 
@@ -99,8 +99,9 @@ function renderWall() {
   app.innerHTML = '';
   const el = h(`
     <div class="container page">
-      <div class="card wall">
-        <div class="lock">🔒</div>
+      <div class="card wall kh-wall">
+        <div class="kh-wall-ava"><img src="${KHADGAR_IMG}" alt="Khadgar"></div>
+        <div class="kh-wall-say">„${esc(wallQuote('member'))}“<span>– Khadgar</span></div>
         <h2>Interner Bereich</h2>
         ${msg ? `<div class="err">${esc(msg)}</div>` : ''}
         <p>Boss Guides, Logs, Vergleich, Umfragen und Nützliches sind nur für Mitglieder des Paranøia-Discords sichtbar.</p>
@@ -117,8 +118,9 @@ function renderOfficerWall() {
   app.innerHTML = '';
   app.appendChild(h(`
     <div class="container page">
-      <div class="card wall">
-        <div class="lock">🛡️</div>
+      <div class="card wall kh-wall">
+        <div class="kh-wall-ava"><img src="${KHADGAR_IMG}" alt="Khadgar"></div>
+        <div class="kh-wall-say">„${esc(wallQuote('officer'))}“<span>– Khadgar</span></div>
         <h2>Offi-Bereich</h2>
         <p>Raidplanung, Gear, VoDs und Bewerbungen sind nur für Offiziere sichtbar.</p>
         <a href="#/guides" class="btn btn-ghost">Zu den Boss Guides</a>
@@ -134,7 +136,7 @@ function renderAuth(u) {
   document.getElementById('nav-officer').classList.toggle('hidden', !u?.officer);
   document.querySelector('[data-route="bewerben"]')?.classList.toggle('hidden', !!u?.member && !DEMO_MODE);   // Mitglieder brauchen den Link nicht (Demo zeigt ihn)
   if (!u) {
-    box.innerHTML = `<button class="btn btn-discord btn-sm">${DISCORD_SVG} Login</button>`;
+    box.innerHTML = `<button class="btn btn-discord btn-sm">${DISCORD_SVG} Login</button>${DEMO_MODE ? '<span class="muted" style="font-size:12px;margin-left:8px">Demo: Login = wieder Offi</span>' : ''}`;
     box.querySelector('button').onclick = () => auth.login();
     return;
   }
@@ -158,8 +160,8 @@ function renderAuth(u) {
         </button>
       </div>
     </div>
-    ${DEMO_MODE ? `<button class="btn btn-ghost btn-sm" data-demo-role title="Nur im Demo-Modus">${u.officer ? 'Raider' : 'Offi'}-Ansicht</button>` : ''}`;
-  box.querySelector('[data-demo-role]')?.addEventListener('click', () => auth.setDemoRole(!u.officer));
+    ${DEMO_MODE ? `<button class="btn btn-ghost btn-sm" data-demo-role title="Nur im Demo-Modus: Offi → Raider → Gast (ausgeloggt)">${u.officer ? 'Raider' : 'Gast'}-Ansicht</button>` : ''}`;
+  box.querySelector('[data-demo-role]')?.addEventListener('click', () => auth.setDemoRole(u.officer ? false : 'guest'));
   // Konto-Menü: Klick auf den Chip öffnet, Klick daneben / Esc schließt
   const chip = box.querySelector('[data-user]'), menu = box.querySelector('[data-umenu]');
   const setOpen = o => { menu.hidden = !o; chip.setAttribute('aria-expanded', String(o)); chip.classList.toggle('open', o); };
