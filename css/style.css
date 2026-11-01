@@ -2267,3 +2267,13 @@ button.hi-ci { padding: 0; border: 0; cursor: pointer; }
 .news-card.kh.pop .kh-ava img { animation: khIn .6s cubic-bezier(.3,1.6,.5,1) calc(var(--d,0s) + .2s) both; }
 @keyframes khIn { 0% { transform: scale(.4); opacity: 0; } 100% { transform: none; opacity: 1; } }
 @media (max-width: 560px) { .news-card.kh { grid-template-columns: 48px minmax(0,1fr) auto; } .kh-ava, .kh-ava img { width: 48px; height: 48px; } .news-card.kh .btn { grid-column: 2; justify-self: start; } .news-card.kh .news-x { grid-row: 1; grid-column: 3; } }
+/* Noten: Spielername nie abschneiden – Spalte breiter, Status darf zuerst schrumpfen */
+.tracker.grades .sticky-col { width: 250px; min-width: 250px; max-width: 250px; }
+.tracker.grades .pname-inner .nm { flex-shrink: 0; overflow: visible; }
+.tracker.grades .pname-inner .rl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tracker.grades .gr-nc { flex-shrink: 0; }
+@media (max-width: 600px) {
+  .tracker.grades .sticky-col { width: 175px; min-width: 175px; max-width: 175px; padding: 0 8px; }
+  .tracker.grades .pname-inner .rl { display: none; }
+  .tracker.grades .gr-nc { font-size: 10px; }
+}

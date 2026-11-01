@@ -196,7 +196,7 @@ export function render(root) {
         ${offs.map(o => `<td><span class="muted">${fmt(offAvg(o))}</span></td>`).join('')}<td></td></tr>`;
 
     const keepX = wrap.scrollLeft, keepY = wrap.scrollTop;
-    wrap.innerHTML = `<table class="tracker grades editable" style="width:max(100%, ${170 + 96 * (offs.length + 1)}px)"><thead><tr>
+    wrap.innerHTML = `<table class="tracker grades editable" style="width:max(100%, ${250 + 96 * (offs.length + 1)}px)"><thead><tr>
         <th class="sticky-col">Spieler</th>
         ${offs.map(o => `<th class="gr-off ${o.me ? 'me' : ''}" title="${o.me ? 'Deine Spalte' : ''}">${esc(o.name)}${o.me ? ' <span class="gr-me">du</span>' : ''}</th>`).join('')}
         <th class="gr-avg">Schnitt</th>
