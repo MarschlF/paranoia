@@ -2247,3 +2247,23 @@ button.hi-ci { padding: 0; border: 0; cursor: pointer; }
 .gr-note-h .muted { margin-left: auto; font-size: 12px; }
 .gr-note-n { font-weight: 700; }
 .gr-note p { white-space: pre-wrap; font-size: 13.5px; line-height: 1.5; }
+
+/* ── Khadgar (Hinweise unten links) ─────────────────────────────────────── */
+.news-root { max-width: min(460px, calc(100vw - 36px)); }
+.news-card.kh { grid-template-columns: 62px minmax(0, 1fr) auto auto; align-items: center;
+  background: linear-gradient(100deg, #1d1530, #15131d 55%); border-color: rgba(176, 124, 255, .5);
+  box-shadow: 0 10px 30px rgba(0,0,0,.5), 0 0 22px rgba(176, 124, 255, .18); }
+.kh-ava { position: relative; width: 62px; height: 62px; border-radius: 50%; padding: 0; border: 0; cursor: pointer; background: none; }
+.kh-ava img { width: 62px; height: 62px; border-radius: 50%; object-fit: cover; display: block;
+  box-shadow: 0 0 0 2px #b07cff, 0 0 16px rgba(176,124,255,.55); transition: transform .15s; }
+.kh-ava:hover img { transform: scale(1.06) rotate(-3deg); }
+.kh-ava .ruf { position: absolute; right: -4px; top: -6px; width: 13px; height: 22px; margin: 0; filter: drop-shadow(0 0 4px rgba(255,190,40,.7)); }
+.news-card.kh .news-kind { color: #c9a2ff; }
+.news-card.kh .news-kind b { color: #e9dcff; }
+.kh-say { font-size: 13px; line-height: 1.4; color: var(--text); font-style: italic; margin: 2px 0 3px; }
+.kh-say.kh-new { animation: khSay .35s ease; }
+@keyframes khSay { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.news-card.kh .news-title { font-size: 12.5px; color: var(--text-2); font-weight: 600; }
+.news-card.kh.pop .kh-ava img { animation: khIn .6s cubic-bezier(.3,1.6,.5,1) calc(var(--d,0s) + .2s) both; }
+@keyframes khIn { 0% { transform: scale(.4); opacity: 0; } 100% { transform: none; opacity: 1; } }
+@media (max-width: 560px) { .news-card.kh { grid-template-columns: 48px minmax(0,1fr) auto; } .kh-ava, .kh-ava img { width: 48px; height: 48px; } .news-card.kh .btn { grid-column: 2; justify-self: start; } .news-card.kh .news-x { grid-row: 1; grid-column: 3; } }

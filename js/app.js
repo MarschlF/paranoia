@@ -8,6 +8,7 @@ import { RUF, hasGuide, isRead, watchMine } from './guidereads.js';
 import { watchMyAnswer } from './polls.js';
 import { startPresence, isOnline, presencePlayer, ago } from './presence.js';
 import { watchStatus } from './status.js';
+import { KHADGAR_IMG, quote, tip } from './khadgar.js';
 import * as polls from './pages/polls.js';
 import { raidBosses, raidDates, todayIso, parseIso, WD } from './ui.js';
 
@@ -266,10 +267,10 @@ function watchGuideBadge(u) {
     const route = location.hash;
     const hide = hidden();
     const items = [
-      ...polls.map(p => ({ key: `poll:${p.id}`, icon: '🗳️', kind: 'Neue Umfrage', title: p.title, href: `#/umfragen/${encodeURIComponent(p.id)}`, cta: 'Ausfüllen' })),
+      ...polls.map(p => ({ key: `poll:${p.id}`, type: 'poll', icon: '🗳️', kind: 'Neue Umfrage', title: p.title, href: `#/umfragen/${encodeURIComponent(p.id)}`, cta: 'Ausfüllen' })),
       ...guides.map(b => {
         const g = st.guides[b.id], changed = st.mine?.reads?.[b.id];
-        return { key: `guide:${b.id}:${g.version || 1}`, icon: '📖', kind: changed ? 'Guide geändert' : 'Neuer Guide', title: b.name, href: `#/guides/${encodeURIComponent(b.id)}`, cta: changed ? 'Neu bestätigen' : 'Lesen' };
+        return { key: `guide:${b.id}:${g.version || 1}`, type: changed ? 'guideChanged' : 'guide', vars: { boss: b.name }, icon: '📖', kind: changed ? 'Guide geändert' : 'Neuer Guide', title: b.name, href: `#/guides/${encodeURIComponent(b.id)}`, cta: changed ? 'Neu bestätigen' : 'Lesen' };
       }),
     ].filter(it => !hide.has(it.key) && route !== it.href);
     // Bestehende Popups stehen lassen (sonst bricht die Animation ab), nur neue einfügen / weggefallene entfernen
@@ -284,12 +285,18 @@ function watchGuideBadge(u) {
       let c = [...box.querySelectorAll('.news-card')].find(x => x.dataset.key === it.key);
       if (!c) {
         const fresh = !newsShown.has(it.key); newsShown.add(it.key);
-        c = h(`<div class="news-card ${fresh ? 'pop' : ''}" data-key="${esc(it.key)}" style="--d:${fresh ? (delay++) * 0.18 : 0}s">
-          <span class="news-ico" title="${esc(it.kind)}">${RUF}</span>
-          <div class="news-txt"><div class="news-kind">${esc(it.kind)}</div><div class="news-title">${esc(it.title)}</div></div>
+        c = h(`<div class="news-card kh ${fresh ? 'pop' : ''}" data-key="${esc(it.key)}" style="--d:${fresh ? (delay++) * 0.18 : 0}s">
+          <button class="kh-ava" title="Khadgar – klick für einen Rat"><img src="${KHADGAR_IMG}" alt="Khadgar">${RUF}</button>
+          <div class="news-txt"><div class="news-kind"><b>Khadgar</b> · ${esc(it.kind)}</div>
+            <div class="kh-say">„${esc(quote(it.type, it.key, it.vars))}“</div>
+            <div class="news-title">${esc(it.title)}</div></div>
           <a class="btn btn-primary btn-sm" href="${esc(it.href)}">${esc(it.cta)}</a>
           <button class="icon-btn news-x" title="Ausblenden">✕</button>
         </div>`);
+        c.querySelector('.kh-ava').onclick = () => {
+          const say = c.querySelector('.kh-say');
+          say.textContent = `„${tip()}“`; say.classList.remove('kh-new'); void say.offsetWidth; say.classList.add('kh-new');
+        };
         c.querySelector('.news-x').onclick = () => { hideNews(c.dataset.key); c.remove(); upd(); };
         c.querySelector('a').onclick = () => setTimeout(upd, 50);
         c.addEventListener('animationend', e => { if (e.animationName === 'questShine') c.classList.remove('pop'); });
