@@ -126,13 +126,13 @@ export function openModal({ title, body, wide = false, actions = [] }) {
   return { el, close };
 }
 
-export function confirmModal(title, text, label = 'Löschen') {
+export function confirmModal(title, text, label = 'Löschen', cls = 'btn-danger') {
   return new Promise(resolve => {
     openModal({
       title, body: `<p class="muted">${esc(text)}</p>`,
       actions: [
         { label: 'Abbrechen', onClick: () => resolve(false) },
-        { label, cls: 'btn-danger', onClick: () => resolve(true) },
+        { label, cls, onClick: () => resolve(true) },
       ],
     });
   });

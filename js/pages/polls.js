@@ -38,20 +38,21 @@ function renderList(root) {
   }
   function draw() {
     const grid = el.querySelector('[data-grid]');
-    const list = polls.slice().sort((a, b) => (b.open - a.open) || String(b.created).localeCompare(String(a.created)));
+    // Entwürfe sehen nur Offis (oben einsortiert)
+    const list = polls.filter(p => officer || !p.draft).sort((a, b) => (!!b.draft - !!a.draft) || (b.open - a.open) || String(b.created).localeCompare(String(a.created)));
     if (!list.length) { grid.innerHTML = `<div class="empty"><div class="big">🗳️</div>Noch keine Umfragen.${officer ? ' Über „+ Neue Umfrage" anlegen.' : ''}</div>`; return; }
     const total = players.filter(p => p.active !== false).length;
     grid.innerHTML = list.map(p => {
       const my = mine[p.id];
       const n = answers.filter(a => a.pollId === p.id).length;
-      const status = my ? `<span class="ready">✓ Beantwortet</span>` : p.open ? `<span class="unread-txt">Noch nicht ausgefüllt</span>` : '<span class="muted">Geschlossen</span>';
-      return `<a class="card poll-card ${p.open && !my ? 'unread' : ''} ${p.open ? '' : 'closed'}" href="#/umfragen/${encodeURIComponent(p.id)}">
+      const status = p.draft ? '<span class="muted">Nur für Offis sichtbar · noch nicht veröffentlicht</span>' : my ? `<span class="ready">✓ Beantwortet</span>` : p.open ? `<span class="unread-txt">Noch nicht ausgefüllt</span>` : '<span class="muted">Geschlossen</span>';
+      return `<a class="card poll-card ${p.open && !my ? 'unread' : ''} ${p.open || p.draft ? '' : 'closed'} ${p.draft ? 'draft' : ''}" href="#/umfragen/${encodeURIComponent(p.id)}">
         ${p.open && !my ? `<div class="gc-ruf">${RUF}</div>` : ''}
-        <div class="poll-top">${p.open ? '<span class="raid-badge">Offen</span>' : '<span class="raid-season">Geschlossen</span>'}<span class="muted">${(p.questions || []).length} Fragen</span></div>
+        <div class="poll-top">${p.draft ? '<span class="draft-badge">Entwurf</span>' : p.open ? '<span class="raid-badge">Offen</span>' : '<span class="raid-season">Geschlossen</span>'}<span class="muted">${(p.questions || []).length} Fragen</span></div>
         <div class="nm">${esc(p.title)}</div>
         ${p.desc ? `<div class="poll-desc">${esc(p.desc)}</div>` : ''}
         <div class="meta">${status}</div>
-        ${officer ? `<span class="gr-pill ${n >= total && total ? 'full' : ''}">${n}/${total} beantwortet</span>` : ''}
+        ${officer && !p.draft ? `<span class="gr-pill ${n >= total && total ? 'full' : ''}">${n}/${total} beantwortet</span>` : ''}
       </a>`;
     }).join('');
   }
@@ -90,7 +91,10 @@ function renderPoll(root, pollId) {
 
   el.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { view = b.dataset.view; try { sessionStorage.setItem('pn-poll-view', view); } catch {} draw(); });
   $('[data-edit]')?.addEventListener('click', () => editPoll(poll, answers.filter(a => a.pollId === pollId).length));
-  $('[data-toggle]')?.addEventListener('click', async () => { await store.set('polls', pollId, { open: !poll.open }); toast(poll.open ? 'Umfrage geschlossen' : 'Umfrage geöffnet'); });
+  $('[data-toggle]')?.addEventListener('click', async () => {
+    if (poll.draft) return publishPoll(poll);
+    await store.set('polls', pollId, { open: !poll.open }); toast(poll.open ? 'Umfrage geschlossen' : 'Umfrage geöffnet');
+  });
   $('[data-del]')?.addEventListener('click', async () => {
     if (!await confirmModal('Umfrage löschen?', 'Die Umfrage und alle Antworten werden gelöscht.')) return;
     for (const a of answers.filter(a => a.pollId === pollId)) await store.remove('pollAnswers', a.id);
@@ -100,11 +104,13 @@ function renderPoll(root, pollId) {
   function draw() {
     const body = $('[data-body]');
     if (poll === undefined) return;
-    if (!poll) { body.innerHTML = '<div class="empty">Umfrage nicht gefunden.</div>'; return; }
+    if (!poll || (poll.draft && !officer)) { body.innerHTML = '<div class="empty">Umfrage nicht gefunden.</div>'; return; }
     $('[data-title]').textContent = poll.title;
     $('[data-desc]').textContent = poll.desc || '';
-    $('[data-eyebrow]').innerHTML = `Umfrage · ${poll.open ? '<span style="color:var(--venom)">offen</span>' : 'geschlossen'}`;
-    if ($('[data-toggle]')) $('[data-toggle]').textContent = poll.open ? 'Schließen' : 'Wieder öffnen';
+    $('[data-eyebrow]').innerHTML = `Umfrage · ${poll.draft ? '<span style="color:var(--gold)">Entwurf – nur Offis sehen das</span>' : poll.open ? '<span style="color:var(--venom)">offen</span>' : 'geschlossen'}`;
+    const tg = $('[data-toggle]');
+    if (tg) { tg.textContent = poll.draft ? '🚀 Jetzt veröffentlichen' : poll.open ? 'Schließen' : 'Wieder öffnen'; tg.className = `btn btn-sm ${poll.draft ? 'btn-primary' : 'btn-ghost'}`; }
+    if (poll.draft && view === 'eval') view = 'fill';
     el.querySelectorAll('[data-view]').forEach(b => {
       b.classList.toggle('active', b.dataset.view === view);
       if (b.dataset.view === 'eval') b.textContent = `Auswertung (${answers.filter(a => a.pollId === pollId).length})`;
@@ -125,14 +131,14 @@ function renderPoll(root, pollId) {
       body.querySelector('[data-change]')?.addEventListener('click', () => { editing = true; draft = structuredClone(my.answers || {}); draw(); });
       return;
     }
-    if (!poll.open) { body.innerHTML = '<div class="empty"><div class="big">🔒</div>Diese Umfrage ist geschlossen.</div>'; return; }
-    body.innerHTML = `<form class="card card-pad poll-form" data-form novalidate>
+    if (!poll.open && !poll.draft) { body.innerHTML = '<div class="empty"><div class="big">🔒</div>Diese Umfrage ist geschlossen.</div>'; return; }
+    body.innerHTML = `${poll.draft ? '<div class="draft-note">👁️ <b>Vorschau</b> – so sehen die Raider die Umfrage. Absenden geht erst nach dem Veröffentlichen.</div>' : ''}<form class="card card-pad poll-form" data-form novalidate>
       ${qs.map((q, i) => `<div class="pq" data-q="${esc(q.id)}">
         <div class="pq-label">${i + 1}. ${esc(q.label)}${q.required ? ' <span class="req">*</span>' : ''}</div>
         ${inputHtml(q, draft[q.id])}
       </div>`).join('')}
       <div class="poll-actions">
-        <button class="btn btn-primary" type="submit">${my ? 'Änderungen speichern' : 'Absenden'}</button>
+        <button class="btn btn-primary" type="submit" ${poll.draft ? 'disabled title="Erst nach dem Veröffentlichen"' : ''}>${my ? 'Änderungen speichern' : 'Absenden'}</button>
         ${my ? '<button class="btn btn-ghost" type="button" data-cancel>Abbrechen</button>' : ''}
         <span class="hint">* Pflichtfrage · Deine Antworten sieht nur die Gildenleitung.</span>
       </div>
@@ -320,16 +326,28 @@ export function editPoll(poll, answerCount = 0) {
 
   openModal({
     title: poll ? 'Umfrage bearbeiten' : 'Neue Umfrage', body, wide: true,
-    actions: [{ label: 'Abbrechen' }, { label: poll ? 'Speichern' : 'Veröffentlichen', cls: 'btn-primary', onClick: async () => {
+    actions: [{ label: 'Abbrechen' },
+      ...(!poll || poll.draft ? [{ label: poll ? 'Entwurf speichern' : 'Als Entwurf speichern', onClick: () => save(true) }] : []),
+      { label: poll && !poll.draft ? 'Speichern' : 'Veröffentlichen', cls: 'btn-primary', onClick: () => save(false) }],
+  });
+  async function save(asDraft) {
       sync();
       if (!p.title.trim()) { toast('Titel fehlt', 'err'); return true; }
       const qs = p.questions.filter(q => q.label.trim());
       if (!qs.length) { toast('Mindestens eine Frage', 'err'); return true; }
       if (qs.some(q => QTYPES[q.type]?.options && (q.options || []).length < 2)) { toast('Auswahlfragen brauchen mind. 2 Antworten', 'err'); return true; }
       const data = { title: p.title.trim(), desc: p.desc.trim(), questions: qs.map(q => ({ ...q, label: q.label.trim() })) };
-      if (poll) await store.set('polls', poll.id, data);
-      else { const id = await store.add('polls', { ...data, open: true, created: new Date().toISOString(), by: auth.user?.name || '' }); location.hash = `#/umfragen/${id}`; }
-      toast(poll ? 'Gespeichert' : 'Umfrage veröffentlicht');
-    } }],
-  });
+      const publish = !asDraft && (!poll || poll.draft);
+      const state = asDraft ? { draft: true, open: false } : publish ? { draft: false, open: true, created: new Date().toISOString() } : {};
+      if (poll) await store.set('polls', poll.id, { ...data, ...state });
+      else { const id = await store.add('polls', { ...data, ...state, created: new Date().toISOString(), by: auth.user?.name || '' }); location.hash = `#/umfragen/${id}`; }
+      toast(asDraft ? 'Entwurf gespeichert – nur Offis sehen ihn' : publish ? 'Umfrage veröffentlicht' : 'Gespeichert');
+  }
+}
+
+/** Entwurf veröffentlichen: ab jetzt sehen alle Raider die Umfrage (und Khadgar meldet sie) */
+async function publishPoll(poll) {
+  if (!await confirmModal('Umfrage veröffentlichen?', `„${poll.title}“ wird für alle Raider sichtbar und kann ab sofort ausgefüllt werden.`, 'Veröffentlichen', 'btn-primary')) return;
+  await store.set('polls', poll.id, { draft: false, open: true, created: new Date().toISOString() });
+  toast('Umfrage veröffentlicht');
 }

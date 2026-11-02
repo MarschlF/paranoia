@@ -2292,3 +2292,7 @@ button.hi-ci { padding: 0; border: 0; cursor: pointer; }
 .kh-wall h2 { font-size: 20px; }
 .kh-wall p { font-size: 14px; }
 @media (prefers-reduced-motion: reduce) { .kh-wall-ava img { animation: none; } }
+/* Umfrage-Entwürfe (nur Offis) */
+.draft-badge { font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--gold-dim); color: var(--gold); }
+.poll-card.draft { border-style: dashed; border-color: rgba(245,196,81,.45); }
+.draft-note { margin-bottom: 12px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--gold-dim); border: 1px solid rgba(245,196,81,.35); color: var(--text); font-size: 14px; }
