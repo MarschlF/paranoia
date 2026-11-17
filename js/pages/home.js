@@ -5,6 +5,7 @@ import { esc, h, raidDates, todayIso, fmtShort, fmtDate, WD, parseIso, raidBosse
 import { getWcl, mergeBoss } from '../wcl.js';
 import { progChartSvg, openProgCurve } from '../progcurve.js';
 import { classStripHtml, bindClassStrip } from '../classstrip.js';
+import { getToken, dayAgo, sparkSvg } from '../token.js';
 
 export function render(root) {
   const el = h(`
@@ -41,7 +42,7 @@ export function render(root) {
       </section>
       <section class="container">
         <div class="home-info">
-          <div class="card hi-card" data-times><div class="hi-title">Raidzeiten</div><div class="loading">…</div></div>
+          <div class="card hi-card tk-card" data-times><div class="hi-title">WoW-Token · EU</div><div class="loading">…</div></div>
           <div class="card hi-card" data-kills-list><div class="hi-title">Letzte Kills</div><div class="loading">…</div></div>
           <div class="card hi-card" data-roster><div class="hi-title">Roster</div><div class="loading">…</div></div>
         </div>
@@ -140,7 +141,13 @@ export function render(root) {
   }
   /** Raidtage + Uhrzeit + nächster Raid relativ */
   const WD_LONG = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+  // WoW-Token statt Raidzeiten (die stehen schon im Hero und im Footer). Ohne Daten → Raidzeiten wie bisher
+  let token, tokenAsked = false;
   function drawTimes() {
+    if (!tokenAsked) { tokenAsked = true; getToken().then(d => { token = d || null; drawTimes(); }); }
+    if (token === undefined) return;
+    if (token) return drawToken(token);
+    $('[data-times]').classList.remove('tk-card');
     const s = settings;
     const days = (s.raidWeekdays || []).slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(d => WD[d]).join(' · ') || CONFIG.guild.raidDaysText;
     const time = s.raidStart ? `${s.raidStart}${s.raidEnd ? ` – ${s.raidEnd}` : ''} Uhr` : '';
@@ -154,6 +161,19 @@ export function render(root) {
       <div class="hi-big">${esc(days)}</div>
       ${time ? `<div class="hi-sub">${esc(time)}</div>` : ''}
       ${next ? `<div class="hi-next"><span class="hi-dot"></span>Nächster Raid: <b>${WD_LONG[parseIso(next).getDay()]}, ${fmtShort(next)}</b> <span class="hi-rel">${rel}</span></div>` : ''}`;
+  }
+  function drawToken(d) {
+    const g = n => Math.round(n).toLocaleString('de-DE');
+    const prev = dayAgo(d);
+    const ch = prev ? (d.price - prev) / prev * 100 : null;
+    const ps = (d.history || []).map(x => x[1]);
+    const mins = d.updated ? Math.max(0, Math.round((Date.now() - Date.parse(d.updated)) / 60e3)) : null;
+    const ago = mins == null ? '' : mins < 1 ? 'gerade eben' : mins < 60 ? `vor ${mins} Min.` : `vor ${Math.round(mins / 60)} Std.`;
+    $('[data-times]').innerHTML = `<div class="hi-title">WoW-Token · EU</div>
+      <div class="tk-price"><img class="tk-icon" src="https://wow.zamimg.com/images/wow/icons/large/wow_token01.jpg" alt="" width="38" height="38">${g(d.price)}<small>Gold</small></div>
+      ${ch != null ? `<div class="tk-ch ${ch >= 0 ? 'up' : 'down'}">${ch >= 0 ? '▲' : '▼'} ${ch >= 0 ? '+' : ''}${ch.toLocaleString('de-AT', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} % <span>seit gestern</span></div>` : ''}
+      ${sparkSvg(d.history)}
+      <div class="tk-foot">${ps.length > 24 ? `<span>7 Tage: ${g(Math.min(...ps))} – ${g(Math.max(...ps))}</span>` : ''}<span>${d.demo ? 'Beispieldaten · ' : ''}Stand ${ago}</span></div>`;
   }
   /** Roster: Anzahl, Rollen, Klassenverteilung als Balken */
   function drawRoster(players) {
