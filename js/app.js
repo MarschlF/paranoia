@@ -20,7 +20,6 @@ import * as useful from './pages/useful.js';
 import * as logs from './pages/logs.js';
 import * as vods from './pages/vods.js';
 import * as gear from './pages/gear.js';
-import * as compare from './pages/compare.js';
 import * as apply from './pages/apply.js';
 import * as applications from './pages/applications.js';
 import * as legal from './pages/legal.js';
@@ -35,7 +34,6 @@ const ROUTES = {
   'bewerbungen':{ page: applications, access: 'officer' },
   'rechtliches':{ page: legal,    access: 'public' },
   'guides':     { page: guides,   access: 'member' },
-  'vergleich':  { page: compare,  access: 'member' },
   'umfragen':   { page: polls,    access: 'member' },
   'nuetzliches':{ page: useful,   access: 'member' },
   'gear':       { page: gear,     access: 'officer' },
@@ -48,7 +46,7 @@ const app = document.getElementById('app');
 app.classList.add('compact');   // schmale Seitenköpfe überall (Home & Bewerben haben eigene Köpfe)
 let cleanup = null;
 
-const MOVED = { comp: 'planung/comp', rotation: 'planung/rotation', loot: 'planung/loot' };   // alte Links weiterleiten
+const MOVED = { comp: 'planung/comp', rotation: 'planung/rotation', loot: 'planung/loot', vergleich: 'logs' };   // alte Links weiterleiten
 function parseRoute() {
   let parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   if (MOVED[parts[0]]) {
@@ -104,7 +102,7 @@ function renderWall() {
         <div class="kh-wall-say">„${esc(wallQuote('member'))}“<span>– Khadgar</span></div>
         <h2>Interner Bereich</h2>
         ${msg ? `<div class="err">${esc(msg)}</div>` : ''}
-        <p>Boss Guides, Logs, Vergleich, Umfragen und Nützliches sind nur für Mitglieder des Paranøia-Discords sichtbar.</p>
+        <p>Boss Guides, Logs, Umfragen und Nützliches sind nur für Mitglieder des Paranøia-Discords sichtbar.</p>
         <button class="btn btn-discord btn-lg" data-login>
           ${DISCORD_SVG} Login mit Discord
         </button>
