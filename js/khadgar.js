@@ -17,6 +17,11 @@ const Q = {
     'Ich habe tausend Bücher in Karazhan gelesen. Du schaffst diesen einen Guide.',
     'Lies den Guide, bevor {boss} dich die Mechanik lehrt.',
   ],
+  event: [
+    'Die Arena öffnet ihre Tore. Möge das schnellste Team gewinnen!',
+    'Selbst in Dalaran spricht man über dieses Turnier.',
+    'Ich habe meinen Einsatz schon gesetzt. Auf wen, verrate ich nicht.',
+  ],
   guideChanged: [
     'Die Taktik für {boss} hat sich gewandelt. Lies erneut, Lehrling.',
     'Neue Erkenntnisse zu {boss}. Selbst ich lerne nie aus.',

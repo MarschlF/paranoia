@@ -58,6 +58,7 @@ function loadLocal() {
   if (!local.addons) { local.addons = demoAddons(); saveLocal(); }
   if (!local.presence) { local.presence = demoPresence(); saveLocal(); }
   if (!local.applications) { local.applications = demoApplications(); local.settings.main.recruit ||= { open: true, classes: ['Evoker', 'Priest', 'Shaman'], text: 'Vor allem Heiler und einen Augmentation-Evoker mit Mythic-Erfahrung.' }; saveLocal(); }
+  if (!local.events) { local.events = demoEvents(); local.settings.main.activeEvent = 'demo-mdi'; saveLocal(); }
   if (!local.vodsDemo) { local.vodsDemo = 1; if (!Object.keys(local.vods || {}).length) local.vods = demoVods(local.settings?.main || {}); saveLocal(); }
   // Ältere Demo-Daten auf Raids umstellen
   if (!local.raids) {
@@ -81,6 +82,40 @@ function demoVods(st) {
     v2: { date: dates[0], title: 'Mythic Prog Abend', url: yt('pnDemoVod02'), pov: 'Drea', boss: '', note: '', streamStart: start(dates[0], 3), streamSrc: 'manual', marks: [], created: at(0.9) },
     v3: { date: dates[1], title: 'Mythic Prog Abend', url: yt('pnDemoVod03'), pov: 'Marschl', boss: '', note: '', streamStart: '', streamSrc: '', marks: [], created: at(4) },
     v4: { date: dates[3], title: 'Raidabend', url: yt('pnDemoVod04'), pov: 'Marschl', boss: '', note: '', streamStart: start(dates[3], 5), streamSrc: 'youtube', marks: [], created: at(9) },
+  };
+}
+/** Beispiel-Event: Paranøia MDI, 2 von 3 Keys gespielt, plus ein beendetes im Archiv (nur Demo) */
+function demoEvents() {
+  const r = (d, tm, t, f = false) => ({ dungeon: d, timer: tm, time: t, failed: f });
+  const empty = () => [0, 1, 2].map(() => r('', '', ''));
+  const base = {
+    info: ['3 Keys · Stufe +12', 'Wertung: % der Timerzeit', 'Punkte 2 · 1 · 0'], fee: 50000, share: 75, guests: ['Zarthos'],
+    part: ['Aleesha', 'Birki', 'Joul', 'Vyaness', 'Hearis', 'Linea', 'Peachqt', 'Ignizia', 'Marvik', 'Enya', 'Drea', 'Dazan', 'Glorck', 'Kragy', 'Zarthos'],
+    timers: [0, 1, 2].map(() => ({ end: 0, left: 600 })),
+  };
+  return {
+    'demo-mdi': { ...base, name: 'Paranøia MDI', when: 'Samstag · 19:00', status: 'live', created: new Date(Date.now() - 3600e3).toISOString(),
+      teams: [
+        { name: 'Wipe Happens', members: ['Vyaness', 'Aleesha', 'Hearis', 'Ignizia', 'Kragy'] },
+        { name: 'Pull & Pray', members: ['Joul', 'Birki', 'Peachqt', 'Marvik', 'Zarthos'] },
+        { name: 'Kein Plan B', members: ['Enya', 'Drea', 'Linea', 'Glorck', 'Dazan'] },
+      ],
+      rounds: [
+        [r('Ruby', '28:00', '24:10'), r('Algeth\'ar', '30:00', '27:45'), r('Nokhud', '33:00', '35:02')],
+        [r('Halls', '32:00', '29:58'), r('Brackenhide', '31:00', '26:40'), r('Ruby', '28:00', '', true)],
+        empty(),
+      ] },
+    'demo-mdi-1': { ...base, name: 'Paranøia MDI #1', when: 'Season 1', status: 'done', created: new Date(Date.now() - 90 * 86400e3).toISOString(),
+      teams: [
+        { name: 'Die Unkillbaren', members: ['Joul', 'Aleesha', 'Peachqt', 'Ignizia', 'Kragy'] },
+        { name: 'Team Lag', members: ['Vyaness', 'Birki', 'Hearis', 'Marvik', 'Glorck'] },
+        { name: 'Afk-Squad', members: ['Enya', 'Drea', 'Linea', 'Dazan', 'Zarthos'] },
+      ],
+      rounds: [
+        [r('Ruby', '28:00', '22:30'), r('Halls', '32:00', '30:10'), r('Nokhud', '33:00', '31:00')],
+        [r('Algeth\'ar', '30:00', '26:00'), r('Ruby', '28:00', '27:50'), r('Halls', '32:00', '33:40')],
+        [r('Nokhud', '33:00', '29:00'), r('Algeth\'ar', '30:00', '28:00'), r('Brackenhide', '31:00', '30:30')],
+      ] },
   };
 }
 /** Beispiel-Bewerbungen (nur Demo) */

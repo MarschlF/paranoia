@@ -9,6 +9,7 @@ import { watchMyAnswer } from './polls.js';
 import { startPresence, isOnline, presencePlayer, ago } from './presence.js';
 import { watchStatus } from './status.js';
 import { KHADGAR_IMG, quote, tip, wallQuote } from './khadgar.js';
+import { leaderLine } from './pages/event.js';
 import * as polls from './pages/polls.js';
 import { raidBosses, raidDates, todayIso, parseIso, WD } from './ui.js';
 
@@ -25,6 +26,7 @@ import * as apply from './pages/apply.js';
 import * as applications from './pages/applications.js';
 import * as legal from './pages/legal.js';
 import * as planning from './pages/planning.js';
+import * as events from './pages/event.js';
 
 const ROUTES = {
   // access: public = alle · member = Raider auf dem Discord · officer = nur Offiziere
@@ -37,6 +39,7 @@ const ROUTES = {
   'guides':     { page: guides,   access: 'member' },
   'vergleich':  { page: compare,  access: 'member' },
   'umfragen':   { page: polls,    access: 'member' },
+  'event':      { page: events,   access: 'member' },   // 🏆 nur sichtbar, wenn ein Event aktiv ist (Offis immer)
   'nuetzliches':{ page: useful,   access: 'member' },
   'gear':       { page: gear,     access: 'officer' },
   'planung':    { page: planning, access: 'officer' },   // Reiter: Comp | Rotation | Loot
@@ -134,6 +137,7 @@ function renderAuth(u) {
   const box = document.getElementById('nav-auth');
   document.querySelectorAll('.nav-internal:not(.nav-officer) a').forEach(a => a.classList.toggle('locked', !u?.member));
   document.getElementById('nav-officer').classList.toggle('hidden', !u?.officer);
+  navEvent();
   document.querySelector('[data-route="bewerben"]')?.classList.toggle('hidden', !!u?.member && !DEMO_MODE);   // Mitglieder brauchen den Link nicht (Demo zeigt ihn)
   if (!u) {
     box.innerHTML = `<button class="btn btn-discord btn-sm">${DISCORD_SVG} Login</button>${DEMO_MODE ? '<span class="muted" style="font-size:12px;margin-left:8px">Demo: Login = wieder Offi</span>' : ''}`;
@@ -247,6 +251,20 @@ const NEWS_HIDE = 'pn-news-hide';
 const hidden = () => { try { return new Set(JSON.parse(sessionStorage.getItem(NEWS_HIDE) || '[]')); } catch { return new Set(); } };
 function hideNews(key) { const s = hidden(); s.add(key); try { sessionStorage.setItem(NEWS_HIDE, JSON.stringify([...s])); } catch {} }
 
+// 🏆 Event im Menü (unter Intern, nach Umfragen): für Raider nur bei aktivem Event, für Offis immer
+let activeEvent = '';
+function navEvent() {
+  let a = document.querySelector('[data-route="event"]');
+  if (!a) {
+    a = h('<a href="#/event" data-route="event">🏆 Event</a>');
+    document.querySelector('[data-route="umfragen"]')?.after(a);
+  }
+  const u = auth.user;
+  a.classList.toggle('hidden', !(u?.officer || (u?.member && activeEvent)));
+  a.classList.toggle('nav-live', !!activeEvent);
+  a.classList.toggle('locked', !u?.member);
+}
+
 const newsShown = new Set();
 let newsOpen = false;          // weitere Popups aufgeklappt?
 function watchGuideBadge(u) {
@@ -274,6 +292,7 @@ function watchGuideBadge(u) {
         const g = st.guides[b.id], changed = st.mine?.reads?.[b.id];
         return { key: `guide:${b.id}:${g.version || 1}`, type: changed ? 'guideChanged' : 'guide', vars: { boss: b.name }, icon: '📖', kind: changed ? 'Guide geändert' : 'Neuer Guide', title: b.name, href: `#/guides/${encodeURIComponent(b.id)}`, cta: changed ? 'Neu bestätigen' : 'Lesen' };
       }),
+      ...(st.event && st.settings.activeEvent === st.event.id ? [{ key: `event:${st.event.id}`, type: 'event', kind: 'Event läuft', title: `${st.event.name} · ${leaderLine(st.event)}`, href: '#/event', cta: 'Zum Scoreboard' }] : []),
     ].filter(it => !hide.has(it.key) && route !== it.href);
     // Bestehende Popups stehen lassen (sonst bricht die Animation ab), nur neue einfügen / weggefallene entfernen
     // Standard: nur EIN Popup, der Rest steckt hinter „+ N weitere“ (deckt sonst Inhalt/Footer zu)
@@ -315,10 +334,16 @@ function watchGuideBadge(u) {
       box.appendChild(btn);
     }
   }
+  let evStop = null;
   const un = [
     store.watchCol('bosses', b => { st.bosses = b; upd(); }),
     store.watchCol('guides', g => { st.guides = Object.fromEntries(g.map(x => [x.id, x])); upd(); }),
-    store.watchDoc('settings', 'main', s => { st.settings = s || {}; upd(); }),
+    store.watchDoc('settings', 'main', s => {
+      st.settings = s || {}; activeEvent = st.settings.activeEvent || ''; navEvent();
+      evStop?.(); evStop = null; st.event = null;
+      if (activeEvent) evStop = store.watchDoc('events', activeEvent, d => { st.event = d; upd(); }, () => {});
+      upd();
+    }),
     watchMine(d => { st.mine = d; upd(); }),
     store.watchCol('polls', ps => {
       st.polls = ps;
@@ -327,7 +352,7 @@ function watchGuideBadge(u) {
     }, () => {}),
   ];
   window.addEventListener('hashchange', upd);
-  badgeStop = () => { un.forEach(f => f()); pollSubs.forEach(f => f()); window.removeEventListener('hashchange', upd); };
+  badgeStop = () => { evStop?.(); un.forEach(f => f()); pollSubs.forEach(f => f()); window.removeEventListener('hashchange', upd); };
 }
 
 // Login-Fehler sofort zeigen – auch wenn man auf einer öffentlichen Seite landet

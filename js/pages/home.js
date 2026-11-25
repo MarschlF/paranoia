@@ -6,10 +6,12 @@ import { getWcl, mergeBoss } from '../wcl.js';
 import { progChartSvg, openProgCurve } from '../progcurve.js';
 import { classStripHtml, bindClassStrip } from '../classstrip.js';
 import { getToken, dayAgo, sparkSvg } from '../token.js';
+import { leaderLine } from './event.js';
 
 export function render(root) {
   const el = h(`
     <div>
+      <div class="container" data-eventbanner></div>
       <div class="container" data-killbanner></div>
       <section class="hero container">
         <div class="hero-grid">
@@ -232,6 +234,21 @@ export function render(root) {
     box.querySelector('[data-spark]')?.addEventListener('click', () => openProgCurve(b));
   }
 
+  // 🏆 Laufendes Event (nur für eingeloggte Raider)
+  let evStop = null;
+  function watchEvent(id) {
+    evStop?.(); evStop = null;
+    const box = $('[data-eventbanner]');
+    if (!id || !auth.isMember) { box.innerHTML = ''; return; }
+    evStop = store.watchDoc('events', id, ev => {
+      box.innerHTML = ev ? `<a class="event-banner" href="#/event">
+        <span class="evb-ico">🏆</span>
+        <span class="evb-txt"><span class="evb-kind"><span class="mdi-live">LIVE</span> ${esc(ev.name)}</span><span class="evb-line">${esc(leaderLine(ev))}</span></span>
+        <span class="btn btn-primary btn-sm">Zum Scoreboard</span></a>` : '';
+    }, () => { box.innerHTML = ''; });
+  }
+  let evFor = null;
+
   const unsubs = [
     store.watchCol('bosses', bs => { rawBosses = bs; drawBosses(); }),
     store.watchCol('raids', rs => { raids = rs; drawSwitch(); drawBosses(); }),
@@ -239,11 +256,12 @@ export function render(root) {
     store.watchDoc('settings', 'main', s => {
       if (!s) return;
       settings = s; drawBosses(); drawSwitch();
+      if (evFor !== (s.activeEvent || '')) { evFor = s.activeEvent || ''; watchEvent(evFor); }
       if (!wcl) getWcl(s).then(d => { if (d) { wcl = d; drawBosses(); } });
       drawTimes();
     }),
   ];
-  return () => { unsubs.forEach(u => u()); nowCover.stop?.(); };
+  return () => { unsubs.forEach(u => u()); nowCover.stop?.(); evStop?.(); };
 }
 
 /** Kleines Konfetti (ohne Bibliothek) – einmal, ca. 2 Sekunden */
